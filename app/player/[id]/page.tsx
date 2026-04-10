@@ -417,8 +417,8 @@ export default function PlayerPage() {
           }
         : null
       setPlayer(playerRecord)
-      setLeagues(leaguesData || [])
-      setSeasonOptions(seasons || [])
+      setLeagues((leaguesData as LeagueRecord[]) || [])
+      setSeasonOptions((seasons as SeasonRecord[]) || [])
 
       const fullStats: FullStat[] = ((statsRaw as StatRecord[]) || []).map((stat) => ({
         ...stat,
