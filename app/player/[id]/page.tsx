@@ -30,7 +30,11 @@ type PlayerRecord = {
   nationality?: string | null
   player_type?: string | null
   image_url?: string | null
-  teams?: TeamRecord | null
+  teams?: TeamRecord | TeamRecord[] | null
+}
+
+type PlayerQueryRecord = Omit<PlayerRecord, 'teams'> & {
+  teams?: TeamRecord[] | null
 }
 
 type StatRecord = {
@@ -209,6 +213,14 @@ function formatGaa(goalsAgainst: number, gp: number, toi: number) {
 
 function normalizeLookupValue(value?: string | null) {
   return (value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+function getPrimaryTeam(teamValue?: TeamRecord | TeamRecord[] | null) {
+  if (Array.isArray(teamValue)) {
+    return teamValue[0] || null
+  }
+
+  return teamValue || null
 }
 
 function resolveLeagueRecord(teamLeagueValue: string | null | undefined, leagues: LeagueRecord[]) {
@@ -397,10 +409,16 @@ export default function PlayerPage() {
         return
       }
 
-      const playerRecord = (playerData as PlayerRecord) || null
+      const playerRow = (playerData as PlayerQueryRecord | null) || null
+      const playerRecord: PlayerRecord | null = playerRow
+        ? {
+            ...playerRow,
+            teams: playerRow.teams ?? null,
+          }
+        : null
       setPlayer(playerRecord)
-      setLeagues((leaguesData as LeagueRecord[]) || [])
-      setSeasonOptions((seasons as SeasonRecord[]) || [])
+      setLeagues(leaguesData || [])
+      setSeasonOptions(seasons || [])
 
       const fullStats: FullStat[] = ((statsRaw as StatRecord[]) || []).map((stat) => ({
         ...stat,
@@ -522,11 +540,12 @@ export default function PlayerPage() {
 
   const playerType = player.player_type || 'N/A'
   const displayName = player.display_name || player.name
-  const teamName = player.teams?.name || 'No Team'
+  const primaryTeam = getPrimaryTeam(player.teams)
+  const teamName = primaryTeam?.name || 'No Team'
   const flagUrl = getFlagUrl(player.nationality)
   const isGoalie = isGoaliePosition(player.position)
-  const playerLeague = resolveLeagueRecord(player.teams?.league, leagues)
-  const playerLeagueLabel = playerLeague?.abbreviation || player.teams?.league || 'No League'
+  const playerLeague = resolveLeagueRecord(primaryTeam?.league, leagues)
+  const playerLeagueLabel = playerLeague?.abbreviation || primaryTeam?.league || 'No League'
   const currentSeasonLabel = stats[0]?.season?.name || allStats[0]?.season?.name || ''
   const last10 = stats.slice(0, 10)
   const careerTotals = grouped.reduce<CareerTotal[]>((totals, seasonRow) => {
@@ -605,6 +624,8 @@ export default function PlayerPage() {
     resolveLeagueRecord(teamLeague, leagues)
 
   function openEditor() {
+    if (!player) return
+
     setSaveMessage('')
     setDeletedStatIds([])
     setDeletedAwardIds([])
@@ -706,6 +727,8 @@ export default function PlayerPage() {
   }
 
   async function saveEditor() {
+    if (!player) return
+
     setIsSaving(true)
     setSaveMessage('')
 
@@ -724,7 +747,7 @@ export default function PlayerPage() {
       const buildPayload = (side: EditableStatSide, gameType: 'regular' | 'playoffs') => ({
         id: side.id,
         player_id: playerId,
-        team_id: player.teams?.id || null,
+        team_id: primaryTeam?.id || null,
         season_id: row.season_id || null,
         game_type: gameType,
         gp: side.gp.trim() ? Number(side.gp) : null,
@@ -848,8 +871,8 @@ export default function PlayerPage() {
             <div style={heroSubtitle}>a.k.a. &quot;{displayName}&quot;</div>
             <div style={heroMeta}>
               <span>{player.number ? `#${player.number}` : '#--'}</span>
-              {player.teams?.id ? (
-                <Link href={`/team/${player.teams.id}`} style={heroMetaLink}>
+              {primaryTeam?.id ? (
+                <Link href={`/team/${primaryTeam.id}`} style={heroMetaLink}>
                   {teamName}
                 </Link>
               ) : (
@@ -860,8 +883,8 @@ export default function PlayerPage() {
                 <Link href={`/league/${playerLeague.id}`} style={heroMetaLink}>
                   {playerLeagueLabel}
                 </Link>
-              ) : player.teams?.league ? (
-                <Link href={`/league/${encodeURIComponent(player.teams.league)}`} style={heroMetaLink}>
+              ) : primaryTeam?.league ? (
+                <Link href={`/league/${encodeURIComponent(primaryTeam.league)}`} style={heroMetaLink}>
                   {playerLeagueLabel}
                 </Link>
               ) : (
@@ -1329,9 +1352,9 @@ export default function PlayerPage() {
         </table>
       </div>
 
-      {player.teams?.id ? (
+      {primaryTeam?.id ? (
         <div style={footerLinkWrap}>
-          <Link href={`/team/${player.teams.id}`} style={teamLink}>
+          <Link href={`/team/${primaryTeam.id}`} style={teamLink}>
             View Team Page
           </Link>
         </div>

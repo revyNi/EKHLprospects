@@ -2,16 +2,9 @@
 
 import './globals.css'
 import Link from 'next/link'
-import { Inter } from 'next/font/google'
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
-
-const inter = Inter({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-inter',
-})
 
 type AdminPanelType = 'player' | 'stats' | 'league' | null
 
@@ -311,7 +304,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en">
       <body style={body}>
         <header style={header}>
           <div style={topBar}>
@@ -616,7 +609,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 const body: React.CSSProperties = {
   margin: 0,
-  fontFamily: 'var(--font-inter), sans-serif',
+  fontFamily: '"Segoe UI", Arial, Helvetica, sans-serif',
   backgroundColor: '#f1f4f8',
 }
 
