@@ -89,8 +89,8 @@ type TeamPlayerStat = {
 type FranchiseStat = {
   id: string
   name: string
-  position?: string | null
-  nationality?: string | null
+  position: string | null | undefined
+  nationality: string | null | undefined
   gp: number
   goals: number
   assists: number
@@ -632,7 +632,7 @@ export default function TeamPage() {
       return acc
     }, {})
   )
-  const franchiseSeasonStats = rawStats
+  const franchiseSeasonStats: FranchiseSeasonStat[] = rawStats
     .filter((row) => matchesFranchiseGameType(row) && row.player_id)
     .map((row) => {
       const player = franchisePlayerMap.get(String(row.player_id))
@@ -655,9 +655,9 @@ export default function TeamPage() {
             ? Number(row.points) || 0
             : (Number(row.goals) || 0) + (Number(row.assists) || 0),
         hits: Number(row.hits) || 0,
-      }
+      } satisfies FranchiseSeasonStat
     })
-    .filter((row): row is FranchiseSeasonStat => Boolean(row))
+    .filter((row): row is FranchiseSeasonStat => row !== null)
 
   return (
     <div style={pageWrap}>
