@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
 
-type AdminPanelType = 'player' | 'stats' | 'league' | null
+type AdminPanelType = 'player' | 'stats' | 'league' | 'team' | null
 
 type AdminPlayerOption = {
   id: string
@@ -22,6 +22,13 @@ type AdminTeamOption = {
 type AdminSeasonOption = {
   id: string
   name: string
+}
+
+type AdminLeagueOption = {
+  id: string
+  name: string
+  abbreviation?: string | null
+  logo_url?: string | null
 }
 
 type SearchPlayerOption = {
@@ -44,6 +51,34 @@ type SearchLeagueOption = {
   name: string
   abbreviation?: string | null
   country_code?: string | null
+  logo_url?: string | null
+  image_url?: string | null
+  href?: string
+}
+
+type SidebarPlayerOption = {
+  id: string
+  name: string
+  nationality?: string | null
+}
+
+type SidebarStatRecord = {
+  player_id?: string | null
+  team_id?: string | null
+  gp?: number | null
+  goals?: number | null
+  assists?: number | null
+  points?: number | null
+}
+
+type SidebarLeaderRow = {
+  id: string
+  name: string
+  nationality?: string | null
+  gp: number
+  goals: number
+  assists: number
+  points: number
 }
 
 type AdminPlayerForm = {
@@ -85,9 +120,23 @@ type AdminLeagueForm = {
   display_name: string
   abbreviation: string
   short_name: string
+  logo_url: string
   category: 'league' | 'international'
   region: string
   country_code: string
+}
+
+type AdminTeamForm = {
+  name: string
+  league: string
+  logo_url: string
+  country: string
+  country_code: string
+  team_colors: string
+  town: string
+  founded: string
+  arena_name: string
+  arena_location: string
 }
 
 const pages = [
@@ -135,9 +184,23 @@ const emptyLeagueForm = (): AdminLeagueForm => ({
   display_name: '',
   abbreviation: '',
   short_name: '',
+  logo_url: '',
   category: 'league',
   region: 'EU',
   country_code: '',
+})
+
+const emptyTeamForm = (): AdminTeamForm => ({
+  name: '',
+  league: '',
+  logo_url: '',
+  country: '',
+  country_code: '',
+  team_colors: '',
+  town: '',
+  founded: '',
+  arena_name: '',
+  arena_location: '',
 })
 
 function toNullableNumber(value: string) {
@@ -149,6 +212,44 @@ function getSearchFlagUrl(countryCode?: string | null) {
   return `https://flagcdn.com/w20/${countryCode.toLowerCase().slice(0, 2)}.png`
 }
 
+function normalizeLeagueLookup(value?: string | null) {
+  return (value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+function normalizeImageUrl(value?: string | null) {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : null
+}
+
+const nationalityToCode: Record<string, string> = {
+  canada: 'CA',
+  usa: 'US',
+  'united states': 'US',
+  sweden: 'SE',
+  finland: 'FI',
+  czechia: 'CZ',
+  'czech republic': 'CZ',
+  slovakia: 'SK',
+  russia: 'RU',
+  germany: 'DE',
+  switzerland: 'CH',
+  austria: 'AT',
+  norway: 'NO',
+  denmark: 'DK',
+  latvia: 'LV',
+}
+
+function getNationalityFlagUrl(nationality?: string | null) {
+  if (!nationality) return null
+  const trimmed = nationality.trim()
+  if (!trimmed) return null
+
+  const countryCode =
+    trimmed.length === 2 ? trimmed.toUpperCase() : nationalityToCode[trimmed.toLowerCase()] || null
+
+  return countryCode ? getSearchFlagUrl(countryCode) : null
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -158,17 +259,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [adminPlayers, setAdminPlayers] = useState<AdminPlayerOption[]>([])
   const [adminTeams, setAdminTeams] = useState<AdminTeamOption[]>([])
   const [adminSeasons, setAdminSeasons] = useState<AdminSeasonOption[]>([])
+  const [adminLeagues, setAdminLeagues] = useState<AdminLeagueOption[]>([])
   const [adminIsLoading, setAdminIsLoading] = useState(false)
   const [adminSaveMessage, setAdminSaveMessage] = useState('')
   const [adminIsSaving, setAdminIsSaving] = useState(false)
   const [playerForm, setPlayerForm] = useState<AdminPlayerForm>(emptyPlayerForm)
   const [statsForm, setStatsForm] = useState<AdminStatsForm>(emptyStatsForm)
   const [leagueForm, setLeagueForm] = useState<AdminLeagueForm>(emptyLeagueForm)
+  const [teamForm, setTeamForm] = useState<AdminTeamForm>(emptyTeamForm)
   const [searchValue, setSearchValue] = useState('')
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchPlayers, setSearchPlayers] = useState<SearchPlayerOption[]>([])
   const [searchTeams, setSearchTeams] = useState<SearchTeamOption[]>([])
   const [searchLeagues, setSearchLeagues] = useState<SearchLeagueOption[]>([])
+  const [leaderPlayers, setLeaderPlayers] = useState<SidebarPlayerOption[]>([])
+  const [leaderTeams, setLeaderTeams] = useState<SearchTeamOption[]>([])
+  const [leaderStats, setLeaderStats] = useState<SidebarStatRecord[]>([])
+  const [selectedLeaderLeague, setSelectedLeaderLeague] = useState('')
 
   useEffect(() => {
     if (!activeAdminPanel) return
@@ -180,15 +287,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         { data: playersData },
         { data: teamsData },
         { data: seasonsData },
+        { data: leaguesData },
       ] = await Promise.all([
         supabase.from('players').select('id, name').order('name', { ascending: true }),
         supabase.from('teams').select('id, name').order('name', { ascending: true }),
         supabase.from('seasons').select('id, name').order('name', { ascending: true }),
+        supabase
+          .from('leagues')
+          .select('id, name, abbreviation, logo_url')
+          .order('name', { ascending: true }),
       ])
 
       setAdminPlayers((playersData as AdminPlayerOption[]) || [])
       setAdminTeams((teamsData as AdminTeamOption[]) || [])
       setAdminSeasons((seasonsData as AdminSeasonOption[]) || [])
+      setAdminLeagues((leaguesData as AdminLeagueOption[]) || [])
       setAdminIsLoading(false)
     }
 
@@ -214,9 +327,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .limit(24),
         supabase
           .from('leagues')
-          .select('id, name, abbreviation, country_code')
+          .select('id, name, abbreviation, country_code, logo_url, image_url')
           .order('name', { ascending: true })
-          .limit(16),
+          .limit(48),
       ])
 
       setSearchPlayers((playersData as SearchPlayerOption[]) || [])
@@ -225,6 +338,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     }
 
     fetchSearchOptions()
+  }, [])
+
+  useEffect(() => {
+    async function fetchSidebarLeaders() {
+      const [{ data: playersData }, { data: teamsData }, { data: statsData }] = await Promise.all([
+        supabase
+          .from('players')
+          .select('id, name, nationality')
+          .order('name', { ascending: true }),
+        supabase.from('teams').select('id, league, logo_url'),
+        supabase
+          .from('stats')
+          .select('player_id, team_id, gp, goals, assists, points'),
+      ])
+
+      setLeaderPlayers((playersData as SidebarPlayerOption[]) || [])
+      setLeaderTeams((teamsData as SearchTeamOption[]) || [])
+      setLeaderStats((statsData as SidebarStatRecord[]) || [])
+    }
+
+    fetchSidebarLeaders()
   }, [])
 
   useEffect(() => {
@@ -237,6 +371,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     if (panel === 'player') setPlayerForm(emptyPlayerForm())
     if (panel === 'stats') setStatsForm(emptyStatsForm())
     if (panel === 'league') setLeagueForm(emptyLeagueForm())
+    if (panel === 'team') setTeamForm(emptyTeamForm())
     setActiveAdminPanel(panel)
   }
 
@@ -261,15 +396,173 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .some((value) => String(value).toLowerCase().includes(normalizedSearch))
       )
     : []
+  const fallbackLeagueOptions: SearchLeagueOption[] = Array.from(
+    new Set(leaderTeams.map((team) => team.league).filter(Boolean))
+  ).map((leagueName) => {
+    const normalizedLeagueName = normalizeLeagueLookup(String(leagueName))
+    const matchedSearchLeague = searchLeagues.find((league) =>
+      [league.name, league.abbreviation]
+        .filter(Boolean)
+        .some((value) => {
+          const normalizedValue = normalizeLeagueLookup(String(value))
+          return (
+            normalizedValue === normalizedLeagueName ||
+            normalizedValue.includes(normalizedLeagueName) ||
+            normalizedLeagueName.includes(normalizedValue)
+          )
+        })
+    )
+    const matchedAdminLeague = adminLeagues.find((league) =>
+      [league.name, league.abbreviation]
+        .filter(Boolean)
+        .some((value) => {
+          const normalizedValue = normalizeLeagueLookup(String(value))
+          return (
+            normalizedValue === normalizedLeagueName ||
+            normalizedValue.includes(normalizedLeagueName) ||
+            normalizedLeagueName.includes(normalizedValue)
+          )
+        })
+    )
+
+    if (matchedSearchLeague) {
+      return {
+        id: matchedSearchLeague.id,
+        name: matchedSearchLeague.name,
+        abbreviation: matchedSearchLeague.abbreviation || null,
+        country_code: matchedSearchLeague.country_code || null,
+        logo_url: matchedSearchLeague.logo_url || null,
+        image_url: matchedSearchLeague.image_url || null,
+        href: `/league/${matchedSearchLeague.id}`,
+      }
+    }
+
+    if (matchedAdminLeague) {
+      return {
+        id: matchedAdminLeague.id,
+        name: matchedAdminLeague.name,
+        abbreviation: matchedAdminLeague.abbreviation || null,
+        country_code: null,
+        logo_url: null,
+        image_url: null,
+        href: `/league/${matchedAdminLeague.id}`,
+      }
+    }
+
+    return {
+      id: String(leagueName),
+      name: String(leagueName),
+      abbreviation: null,
+      country_code: null,
+      logo_url: null,
+      image_url: null,
+      href: `/league/${encodeURIComponent(String(leagueName))}`,
+    }
+  })
+  const resolvedLeagueOptions = searchLeagues.length
+    ? searchLeagues.map((league) => ({
+        ...league,
+        logo_url: normalizeImageUrl(league.logo_url),
+        image_url: normalizeImageUrl(league.image_url),
+      }))
+    : adminLeagues.length
+      ? adminLeagues.map((league) => ({
+          id: league.id,
+          name: league.name,
+          abbreviation: league.abbreviation || null,
+          country_code: null,
+          logo_url: normalizeImageUrl(league.logo_url),
+          image_url: null,
+          href: `/league/${league.id}`,
+        }))
+      : fallbackLeagueOptions
+  const sidebarLeagueOptions = resolvedLeagueOptions.length ? resolvedLeagueOptions : fallbackLeagueOptions
+  const activeLeaderLeagueId = selectedLeaderLeague || sidebarLeagueOptions[0]?.id || ''
+  const activeLeaderLeague = sidebarLeagueOptions.find((league) => league.id === activeLeaderLeagueId) || null
+  const leaderPlayersById = new Map(leaderPlayers.map((player) => [String(player.id), player]))
+  const leaderRows = Object.values(
+    leaderStats.reduce<Record<string, SidebarLeaderRow>>((acc, stat) => {
+      if (!stat.player_id || !stat.team_id) return acc
+
+      const team = leaderTeams.find((entry) => String(entry.id) === String(stat.team_id))
+      if (!team?.league) return acc
+
+      if (activeLeaderLeague) {
+        const normalizedTeamLeague = normalizeLeagueLookup(team.league)
+        const matchesLeague = [activeLeaderLeague.name, activeLeaderLeague.abbreviation]
+          .filter(Boolean)
+          .some((value) => {
+            const normalizedLeagueValue = normalizeLeagueLookup(String(value))
+            return (
+              normalizedLeagueValue === normalizedTeamLeague ||
+              normalizedLeagueValue.includes(normalizedTeamLeague) ||
+              normalizedTeamLeague.includes(normalizedLeagueValue)
+            )
+          })
+
+        if (!matchesLeague) return acc
+      }
+
+      const player = leaderPlayersById.get(String(stat.player_id))
+      if (!player) return acc
+
+      if (!acc[player.id]) {
+        acc[player.id] = {
+          id: player.id,
+          name: player.name,
+          nationality: player.nationality,
+          gp: 0,
+          goals: 0,
+          assists: 0,
+          points: 0,
+        }
+      }
+
+      acc[player.id].gp += Number(stat.gp) || 0
+      acc[player.id].goals += Number(stat.goals) || 0
+      acc[player.id].assists += Number(stat.assists) || 0
+      acc[player.id].points +=
+        stat.points !== null && stat.points !== undefined
+          ? Number(stat.points) || 0
+          : (Number(stat.goals) || 0) + (Number(stat.assists) || 0)
+
+      return acc
+    }, {})
+  )
+    .sort((a, b) => b.points - a.points || b.goals - a.goals || b.assists - a.assists || a.name.localeCompare(b.name))
+    .slice(0, 5)
+
+  useEffect(() => {
+    if (!selectedLeaderLeague && sidebarLeagueOptions.length) {
+      setSelectedLeaderLeague(sidebarLeagueOptions[0].id)
+    }
+  }, [selectedLeaderLeague, sidebarLeagueOptions])
   const leagueMatches = normalizedSearch
-    ? searchLeagues.filter((league) =>
+    ? resolvedLeagueOptions.filter((league) =>
         [league.name, league.abbreviation]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(normalizedSearch))
       )
     : []
+  const popularLeagueOptions: SearchLeagueOption[] = searchLeagues.length
+    ? searchLeagues.map((league) => ({
+        ...league,
+        logo_url: normalizeImageUrl(league.logo_url),
+        image_url: normalizeImageUrl(league.image_url),
+      }))
+    : adminLeagues.length
+      ? adminLeagues.map((league) => ({
+          id: league.id,
+          name: league.name,
+          abbreviation: league.abbreviation || null,
+          country_code: null,
+          logo_url: normalizeImageUrl(league.logo_url),
+          image_url: null,
+          href: `/league/${league.id}`,
+        }))
+      : fallbackLeagueOptions
 
-  const combinedMatches = [
+  const legacyCombinedMatches = [
     ...playerMatches.slice(0, 4).map((player) => ({
       id: `player-${player.id}`,
       href: `/player/${player.id}`,
@@ -295,6 +588,33 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       imageUrl: getSearchFlagUrl(league.country_code),
     })),
   ].slice(0, 8)
+  const playerSearchResults = playerMatches.slice(0, 4).map((player) => ({
+    id: `player-${player.id}`,
+    href: `/player/${player.id}`,
+    title: player.name,
+    subtitle:
+      `${player.position || 'Player'}` +
+      `${player.nationality ? ` • ${player.nationality}` : ''}`,
+    kind: 'Player',
+    imageUrl: player.image_url || null,
+  }))
+  const teamSearchResults = teamMatches.slice(0, 3).map((team) => ({
+    id: `team-${team.id}`,
+    href: `/team/${team.id}`,
+    title: team.name,
+    subtitle: team.league || 'Team',
+    kind: 'Team',
+    imageUrl: team.logo_url || null,
+  }))
+  const leagueSearchResults = leagueMatches.slice(0, 8).map((league) => ({
+    id: `league-${league.id}`,
+    href: league.href || `/league/${league.id}`,
+    title: league.name,
+    subtitle: league.abbreviation ? `${league.abbreviation} • League` : 'League',
+    kind: 'League',
+    imageUrl: league.logo_url || league.image_url || getSearchFlagUrl(league.country_code),
+  }))
+  const combinedMatches = [...playerSearchResults, ...teamSearchResults, ...leagueSearchResults]
 
   function submitGlobalSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -422,6 +742,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       display_name: leagueForm.display_name.trim() || null,
       abbreviation: leagueForm.abbreviation.trim() || null,
       short_name: leagueForm.short_name.trim() || null,
+      logo_url: leagueForm.logo_url.trim() || null,
       category: leagueForm.category,
       region: leagueForm.region.trim() || null,
       country_code: leagueForm.country_code.trim().toUpperCase() || null,
@@ -437,6 +758,36 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
     setAdminSaveMessage('League added.')
     setLeagueForm(emptyLeagueForm())
+    setAdminIsSaving(false)
+  }
+
+  async function saveTeamForm() {
+    setAdminIsSaving(true)
+    setAdminSaveMessage('')
+
+    const payload = {
+      name: teamForm.name.trim(),
+      league: teamForm.league.trim() || null,
+      logo_url: teamForm.logo_url.trim() || null,
+      country: teamForm.country.trim() || null,
+      country_code: teamForm.country_code.trim().toUpperCase() || null,
+      team_colors: teamForm.team_colors.trim() || null,
+      town: teamForm.town.trim() || null,
+      founded: teamForm.founded.trim() || null,
+      arena_name: teamForm.arena_name.trim() || null,
+      arena_location: teamForm.arena_location.trim() || null,
+    }
+
+    const { error } = await supabase.from('teams').insert(payload)
+
+    if (error) {
+      setAdminSaveMessage(error.message)
+      setAdminIsSaving(false)
+      return
+    }
+
+    setAdminSaveMessage('Team added.')
+    setTeamForm(emptyTeamForm())
     setAdminIsSaving(false)
   }
 
@@ -501,6 +852,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('league')}>
                       Add League
                     </button>
+                    <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('team')}>
+                      Add Team
+                    </button>
                   </div>
                 ) : null}
               </div>
@@ -543,106 +897,192 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <div className="global-search-results">
                       <div className="global-search-heading">Search Results</div>
                       {combinedMatches.length ? (
-                        combinedMatches.map((result) => (
-                          <Link
-                            key={result.id}
-                            href={result.href}
-                            className="global-search-result"
-                            onClick={() => setIsSearchOpen(false)}
-                          >
-                            <div className="global-search-result-thumb">
-                              {result.imageUrl ? (
-                                <img
-                                  src={result.imageUrl}
-                                  alt={result.title}
-                                  className="global-search-result-image"
-                                />
-                              ) : (
-                                <span className="global-search-result-fallback">
-                                  {result.title.slice(0, 1)}
-                                </span>
-                              )}
-                            </div>
-                            <div className="global-search-result-copy">
-                              <span className="global-search-result-kind">{result.kind}</span>
-                              <span className="global-search-result-title">{result.title}</span>
-                              <span className="global-search-result-subtitle">{result.subtitle}</span>
-                            </div>
-                          </Link>
-                        ))
+                        <>
+                          {playerSearchResults.length ? (
+                            <>
+                              <div className="global-search-section-label">Players</div>
+                              {playerSearchResults.map((result) => (
+                                <Link
+                                  key={result.id}
+                                  href={result.href}
+                                  className="global-search-result"
+                                  onClick={() => setIsSearchOpen(false)}
+                                >
+                                  <div className="global-search-result-thumb">
+                                    {result.imageUrl ? (
+                                      <img
+                                        src={result.imageUrl}
+                                        alt={result.title}
+                                        className="global-search-result-image"
+                                      />
+                                    ) : (
+                                      <span className="global-search-result-fallback">
+                                        {result.title.slice(0, 1)}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="global-search-result-copy">
+                                    <span className="global-search-result-kind">{result.kind}</span>
+                                    <span className="global-search-result-title">{result.title}</span>
+                                    <span className="global-search-result-subtitle">{result.subtitle}</span>
+                                  </div>
+                                </Link>
+                              ))}
+                            </>
+                          ) : null}
+                          {teamSearchResults.length ? (
+                            <>
+                              <div className="global-search-section-label">Teams</div>
+                              {teamSearchResults.map((result) => (
+                                <Link
+                                  key={result.id}
+                                  href={result.href}
+                                  className="global-search-result"
+                                  onClick={() => setIsSearchOpen(false)}
+                                >
+                                  <div className="global-search-result-thumb">
+                                    {result.imageUrl ? (
+                                      <img
+                                        src={result.imageUrl}
+                                        alt={result.title}
+                                        className="global-search-result-image"
+                                      />
+                                    ) : (
+                                      <span className="global-search-result-fallback">
+                                        {result.title.slice(0, 1)}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="global-search-result-copy">
+                                    <span className="global-search-result-kind">{result.kind}</span>
+                                    <span className="global-search-result-title">{result.title}</span>
+                                    <span className="global-search-result-subtitle">{result.subtitle}</span>
+                                  </div>
+                                </Link>
+                              ))}
+                            </>
+                          ) : null}
+                          {leagueSearchResults.length ? (
+                            <>
+                              <div className="global-search-section-label">Leagues</div>
+                              {leagueSearchResults.map((result) => (
+                                <Link
+                                  key={result.id}
+                                  href={result.href}
+                                  className="global-search-result"
+                                  onClick={() => setIsSearchOpen(false)}
+                                >
+                                  <div className="global-search-result-thumb">
+                                    {result.imageUrl ? (
+                                      <img
+                                        src={result.imageUrl}
+                                        alt={result.title}
+                                        className="global-search-result-image"
+                                      />
+                                    ) : (
+                                      <span className="global-search-result-fallback">
+                                        {result.title.slice(0, 1)}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="global-search-result-copy">
+                                    <span className="global-search-result-kind">{result.kind}</span>
+                                    <span className="global-search-result-title">{result.title}</span>
+                                    <span className="global-search-result-subtitle">{result.subtitle}</span>
+                                  </div>
+                                </Link>
+                              ))}
+                            </>
+                          ) : null}
+                        </>
                       ) : (
                         <div className="global-search-empty">No matches found.</div>
                       )}
                     </div>
                   ) : (
-                    <>
-                      <div className="global-search-heading">Top Player Searches</div>
-                      <div className="global-search-card-row">
-                        {searchPlayers.slice(0, 6).map((player) => (
-                          <Link
-                            key={player.id}
-                            href={`/player/${player.id}`}
-                            className="global-search-card"
-                            onClick={() => setIsSearchOpen(false)}
-                          >
-                            {player.image_url ? (
-                              <img
-                                src={player.image_url}
-                                alt={player.name}
-                                className="global-search-card-image"
-                              />
-                            ) : (
-                              <div className="global-search-card-image global-search-card-image-fallback">
-                                {player.name.slice(0, 1)}
-                              </div>
-                            )}
-                            <div className="global-search-card-overlay" />
-                            <div className="global-search-card-copy">
-                              <span className="global-search-card-title">
-                                {player.name} {player.position ? `(${player.position})` : ''}
-                              </span>
-                              <span className="global-search-card-subtitle">
-                                {player.nationality || 'Player'}
-                              </span>
-                            </div>
-                          </Link>
-                        ))}
-                      </div>
-
-                      <div className="global-search-heading global-search-heading-spaced">
-                        Popular Leagues
-                      </div>
-                      <div className="global-search-list">
-                        {searchLeagues.slice(0, 6).map((league) => (
-                          <Link
-                            key={league.id}
-                            href={`/league/${league.id}`}
-                            className="global-search-list-item"
-                            onClick={() => setIsSearchOpen(false)}
-                          >
-                            <div className="global-search-list-badge">
-                              {league.country_code ? (
+                    <div className="global-search-default-grid">
+                      <div>
+                        <div className="global-search-heading">Top Player Searches</div>
+                        <div className="global-search-card-row">
+                          {searchPlayers.slice(0, 4).map((player) => (
+                            <Link
+                              key={player.id}
+                              href={`/player/${player.id}`}
+                              className="global-search-card"
+                              onClick={() => setIsSearchOpen(false)}
+                            >
+                              {player.image_url ? (
                                 <img
-                                  src={getSearchFlagUrl(league.country_code) || ''}
-                                  alt={league.country_code}
-                                  className="global-search-list-flag"
+                                  src={player.image_url}
+                                  alt={player.name}
+                                  className="global-search-card-image"
                                 />
                               ) : (
-                                <span className="global-search-list-initial">
-                                  {(league.abbreviation || league.name).slice(0, 1)}
-                                </span>
+                                <div className="global-search-card-image global-search-card-image-fallback">
+                                  {player.name.slice(0, 1)}
+                                </div>
                               )}
-                            </div>
-                            <div className="global-search-list-copy">
-                              <span className="global-search-list-title">
-                                {league.abbreviation || league.name}
-                              </span>
-                              <span className="global-search-list-subtitle">League</span>
-                            </div>
-                          </Link>
-                        ))}
+                              <div className="global-search-card-overlay" />
+                              <div className="global-search-card-copy">
+                                <span className="global-search-card-title">
+                                  {player.name} {player.position ? `(${player.position})` : ''}
+                                </span>
+                                <span className="global-search-card-subtitle">
+                                  {player.nationality || 'Player'}
+                                </span>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
                       </div>
-                    </>
+
+                      <div className="global-search-leagues-column">
+                        <div className="global-search-heading">Popular Leagues</div>
+                        <div className="global-search-list global-search-list-single">
+                          {popularLeagueOptions.slice(0, 10).map((league) => (
+                            <Link
+                              key={league.id}
+                              href={league.href || `/league/${league.id}`}
+                              className="global-search-list-item"
+                              onClick={() => setIsSearchOpen(false)}
+                            >
+                              <div className="global-search-list-badge">
+                                {normalizeImageUrl(league.logo_url) || normalizeImageUrl(league.image_url) ? (
+                                  <img
+                                    src={normalizeImageUrl(league.logo_url) || normalizeImageUrl(league.image_url) || ''}
+                                    alt={league.name}
+                                    className="global-search-list-logo"
+                                  />
+                                ) : league.country_code ? (
+                                  <img
+                                    src={getSearchFlagUrl(league.country_code) || ''}
+                                    alt={league.country_code}
+                                    className="global-search-list-flag"
+                                  />
+                                ) : (
+                                  <span className="global-search-list-initial">
+                                    {(league.abbreviation || league.name).slice(0, 1)}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="global-search-list-copy">
+                                <span className="global-search-list-title">
+                                  {league.abbreviation || league.name}
+                                </span>
+                                <span className="global-search-list-subtitle">
+                                  {league.name !== league.abbreviation && league.abbreviation
+                                    ? league.name
+                                    : 'League'}
+                                </span>
+                              </div>
+                            </Link>
+                          ))}
+                          {!popularLeagueOptions.length ? (
+                            <div className="global-search-empty">No leagues available.</div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               ) : null}
@@ -650,7 +1090,81 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
 
-        <main style={main}>{children}</main>
+        <main style={main}>
+          <div className="global-page-shell">
+            <aside className="global-leaders-sidebar">
+              <div className="global-leaders-card">
+                <div className="global-leaders-title">Scoring Leaders</div>
+                <div className="global-leaders-body">
+                  <select
+                    value={activeLeaderLeagueId}
+                    onChange={(event) => setSelectedLeaderLeague(event.target.value)}
+                    className="global-leaders-select"
+                  >
+                    {sidebarLeagueOptions.map((league) => (
+                      <option key={league.id} value={league.id}>
+                        {league.abbreviation || league.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <table className="global-leaders-table">
+                    <thead>
+                      <tr className="global-leaders-head">
+                        <th>#</th>
+                        <th>Player</th>
+                        <th>GP</th>
+                        <th>G</th>
+                        <th>A</th>
+                        <th>TP</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderRows.map((leader, index) => {
+                        const leaderFlagUrl = getNationalityFlagUrl(leader.nationality)
+
+                        return (
+                          <tr key={leader.id} className="global-leaders-row">
+                            <td>{index + 1}</td>
+                            <td>
+                              <Link href={`/player/${leader.id}`} className="global-leaders-player">
+                                {leaderFlagUrl ? (
+                                  <img
+                                    src={leaderFlagUrl}
+                                    alt={leader.nationality || ''}
+                                    className="global-leaders-flag"
+                                  />
+                                ) : null}
+                                <span>{leader.name}</span>
+                              </Link>
+                            </td>
+                            <td>{leader.gp}</td>
+                            <td>{leader.goals}</td>
+                            <td>{leader.assists}</td>
+                            <td className="global-leaders-points">{leader.points}</td>
+                          </tr>
+                        )
+                      })}
+                      {!leaderRows.length ? (
+                        <tr className="global-leaders-row">
+                          <td colSpan={6} className="global-leaders-empty">
+                            No leaders available.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+
+                  <button type="button" className="global-leaders-more">
+                    Show More
+                  </button>
+                </div>
+              </div>
+            </aside>
+
+            <div className="global-page-content">{children}</div>
+          </div>
+        </main>
 
         {activeAdminPanel ? (
           <div style={modalOverlay} onClick={closeAdminPanel}>
@@ -661,6 +1175,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     ? 'Add Player'
                     : activeAdminPanel === 'stats'
                       ? 'Add Roster/Stats'
+                      : activeAdminPanel === 'team'
+                        ? 'Add Team'
                       : 'Add League'}
                 </div>
                 <button type="button" onClick={closeAdminPanel} style={closeButton}>
@@ -839,6 +1355,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <label style={fieldWrap}><span style={fieldLabel}>Display Name</span><input value={leagueForm.display_name} onChange={(event) => setLeagueForm((current) => ({ ...current, display_name: event.target.value }))} style={fieldInput} /></label>
                     <label style={fieldWrap}><span style={fieldLabel}>Abbreviation</span><input value={leagueForm.abbreviation} onChange={(event) => setLeagueForm((current) => ({ ...current, abbreviation: event.target.value }))} style={fieldInput} /></label>
                     <label style={fieldWrap}><span style={fieldLabel}>Short Name</span><input value={leagueForm.short_name} onChange={(event) => setLeagueForm((current) => ({ ...current, short_name: event.target.value }))} style={fieldInput} /></label>
+                    <label style={fieldWrap}><span style={fieldLabel}>Logo URL</span><input value={leagueForm.logo_url} onChange={(event) => setLeagueForm((current) => ({ ...current, logo_url: event.target.value }))} style={fieldInput} /></label>
                     <label style={fieldWrap}>
                       <span style={fieldLabel}>Category</span>
                       <select
@@ -861,6 +1378,100 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
               ) : null}
 
+              {!adminIsLoading && activeAdminPanel === 'team' ? (
+                <div style={modalBody}>
+                  <div style={formGrid}>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Name</span>
+                      <input
+                        value={teamForm.name}
+                        onChange={(event) => setTeamForm((current) => ({ ...current, name: event.target.value }))}
+                        style={fieldInput}
+                      />
+                    </label>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>League</span>
+                      <select
+                        value={teamForm.league}
+                        onChange={(event) => setTeamForm((current) => ({ ...current, league: event.target.value }))}
+                        style={fieldInput}
+                      >
+                        <option value="">No league</option>
+                        {adminLeagues.map((league) => (
+                          <option key={league.id} value={league.abbreviation || league.name}>
+                            {league.abbreviation ? `${league.abbreviation} - ${league.name}` : league.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Country</span>
+                      <input
+                        value={teamForm.country}
+                        onChange={(event) => setTeamForm((current) => ({ ...current, country: event.target.value }))}
+                        style={fieldInput}
+                      />
+                    </label>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Country Code</span>
+                      <input
+                        value={teamForm.country_code}
+                        onChange={(event) => setTeamForm((current) => ({ ...current, country_code: event.target.value }))}
+                        style={fieldInput}
+                      />
+                    </label>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Town</span>
+                      <input
+                        value={teamForm.town}
+                        onChange={(event) => setTeamForm((current) => ({ ...current, town: event.target.value }))}
+                        style={fieldInput}
+                      />
+                    </label>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Founded</span>
+                      <input
+                        value={teamForm.founded}
+                        onChange={(event) => setTeamForm((current) => ({ ...current, founded: event.target.value }))}
+                        style={fieldInput}
+                      />
+                    </label>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Arena Name</span>
+                      <input
+                        value={teamForm.arena_name}
+                        onChange={(event) => setTeamForm((current) => ({ ...current, arena_name: event.target.value }))}
+                        style={fieldInput}
+                      />
+                    </label>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Arena Location</span>
+                      <input
+                        value={teamForm.arena_location}
+                        onChange={(event) => setTeamForm((current) => ({ ...current, arena_location: event.target.value }))}
+                        style={fieldInput}
+                      />
+                    </label>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Team Colors</span>
+                      <input
+                        value={teamForm.team_colors}
+                        onChange={(event) => setTeamForm((current) => ({ ...current, team_colors: event.target.value }))}
+                        style={fieldInput}
+                      />
+                    </label>
+                    <label style={{ ...fieldWrap, gridColumn: '1 / -1' }}>
+                      <span style={fieldLabel}>Logo URL</span>
+                      <input
+                        value={teamForm.logo_url}
+                        onChange={(event) => setTeamForm((current) => ({ ...current, logo_url: event.target.value }))}
+                        style={fieldInput}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : null}
+
               <div style={modalFooter}>
                 {adminSaveMessage ? <div style={saveMessage}>{adminSaveMessage}</div> : <div />}
                 <button
@@ -870,7 +1481,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       ? savePlayerForm
                       : activeAdminPanel === 'stats'
                         ? saveStatsForm
-                        : saveLeagueForm
+                        : activeAdminPanel === 'team'
+                          ? saveTeamForm
+                          : saveLeagueForm
                   }
                   style={primaryButton}
                   disabled={adminIsSaving}
@@ -893,8 +1506,7 @@ const body: React.CSSProperties = {
 }
 
 const header: React.CSSProperties = {
-  position: 'sticky',
-  top: 0,
+  position: 'relative',
   zIndex: 40,
 }
 
@@ -938,6 +1550,7 @@ const adminMenuWrap: React.CSSProperties = {
   position: 'relative',
   display: 'flex',
   alignItems: 'center',
+  marginLeft: 'auto',
 }
 
 const adminMenuButton: React.CSSProperties = {

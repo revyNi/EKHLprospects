@@ -44,6 +44,9 @@ button:hover {
 }
 
 .global-search-shell {
+  background: #f1f4f8;
+  border-bottom: 1px solid rgba(16, 40, 61, 0.08);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.85);
   padding: 14px 12px 8px;
 }
 
@@ -127,6 +130,8 @@ button:hover {
   box-shadow: 0 16px 30px rgba(0, 0, 0, 0.16);
   padding: 12px;
   z-index: 80;
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
 .global-search-heading {
@@ -140,9 +145,22 @@ button:hover {
   margin-top: 14px;
 }
 
+.global-search-default-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);
+  gap: 18px;
+}
+
+.global-search-leagues-column {
+  background: #fff;
+  border: 1px solid #d7dde3;
+  border-radius: 12px;
+  padding: 12px;
+}
+
 .global-search-card-row {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -207,6 +225,10 @@ button:hover {
   gap: 8px 18px;
 }
 
+.global-search-list-single {
+  grid-template-columns: 1fr;
+}
+
 .global-search-list-item {
   display: flex;
   align-items: center;
@@ -235,6 +257,13 @@ button:hover {
   border: 1px solid #d2d8de;
 }
 
+.global-search-list-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  display: block;
+}
+
 .global-search-list-initial {
   color: #355267;
   font-size: 16px;
@@ -261,6 +290,13 @@ button:hover {
 .global-search-results {
   display: grid;
   gap: 8px;
+}
+
+.global-search-section-label {
+  color: #445766;
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 6px;
 }
 
 .global-search-result {
@@ -329,7 +365,153 @@ button:hover {
   padding: 6px 2px;
 }
 
+.global-page-shell {
+  width: min(1480px, calc(100vw - 24px));
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  padding: 0 0 32px;
+}
+
+.global-leaders-sidebar {
+  position: static;
+  min-width: 0;
+}
+
+.global-leaders-card {
+  background: #fff;
+  border: 1px solid #c8d2dc;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.global-leaders-title {
+  background: #143d57;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 12px 14px 11px;
+}
+
+.global-leaders-body {
+  padding: 8px 0 0;
+}
+
+.global-leaders-select {
+  width: calc(100% - 20px);
+  margin: 0 10px 10px;
+  height: 38px;
+  border: 1px solid #d3dbe3;
+  border-radius: 6px;
+  background: #fff;
+  color: #4b5c6c;
+  font-size: 15px;
+  padding: 0 12px;
+}
+
+.global-leaders-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.global-leaders-head {
+  background: #d71f29;
+}
+
+.global-leaders-head th {
+  color: #fff;
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.global-leaders-head th:nth-child(n + 3) {
+  text-align: center;
+}
+
+.global-leaders-row td {
+  padding: 8px 10px;
+  border-top: 1px solid #edf1f4;
+  color: #243746;
+}
+
+.global-leaders-row:nth-child(odd) td {
+  background: #f8fafb;
+}
+
+.global-leaders-row:nth-child(even) td {
+  background: #f1f5f8;
+}
+
+.global-leaders-row td:nth-child(n + 3) {
+  text-align: center;
+}
+
+.global-leaders-row td:nth-child(6) {
+  background: #e4eaef;
+}
+
+.global-leaders-player {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #1c6aa0;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.global-leaders-flag {
+  width: 16px;
+  height: 11px;
+  object-fit: cover;
+  border: 1px solid #ced5db;
+}
+
+.global-leaders-points {
+  font-weight: 800;
+}
+
+.global-leaders-empty {
+  text-align: center;
+  color: #687b8b;
+}
+
+.global-leaders-more {
+  width: calc(100% - 20px);
+  margin: 10px;
+  height: 40px;
+  border: 0;
+  border-radius: 0 0 6px 6px;
+  background: #24a04a;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.global-page-content {
+  min-width: 0;
+}
+
 @media (max-width: 1100px) {
+  .global-page-shell {
+    grid-template-columns: 1fr;
+    width: min(1480px, calc(100vw - 24px));
+  }
+
+  .global-leaders-sidebar {
+    position: static;
+  }
+
+  .global-search-default-grid {
+    grid-template-columns: 1fr;
+  }
+
   .global-search-card-row {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
