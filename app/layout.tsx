@@ -1,9 +1,10 @@
 'use client'
+/* eslint-disable @next/next/no-img-element */
 
 import './globals.css'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
 
 type AdminPanelType = 'player' | 'stats' | 'league' | null
@@ -21,6 +22,28 @@ type AdminTeamOption = {
 type AdminSeasonOption = {
   id: string
   name: string
+}
+
+type SearchPlayerOption = {
+  id: string
+  name: string
+  position?: string | null
+  nationality?: string | null
+  image_url?: string | null
+}
+
+type SearchTeamOption = {
+  id: string
+  name: string
+  logo_url?: string | null
+  league?: string | null
+}
+
+type SearchLeagueOption = {
+  id: string
+  name: string
+  abbreviation?: string | null
+  country_code?: string | null
 }
 
 type AdminPlayerForm = {
@@ -121,8 +144,14 @@ function toNullableNumber(value: string) {
   return value.trim() ? Number(value) : null
 }
 
+function getSearchFlagUrl(countryCode?: string | null) {
+  if (!countryCode || !countryCode.trim()) return null
+  return `https://flagcdn.com/w20/${countryCode.toLowerCase().slice(0, 2)}.png`
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
 
   const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(false)
   const [activeAdminPanel, setActiveAdminPanel] = useState<AdminPanelType>(null)
@@ -135,6 +164,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [playerForm, setPlayerForm] = useState<AdminPlayerForm>(emptyPlayerForm)
   const [statsForm, setStatsForm] = useState<AdminStatsForm>(emptyStatsForm)
   const [leagueForm, setLeagueForm] = useState<AdminLeagueForm>(emptyLeagueForm)
+  const [searchValue, setSearchValue] = useState('')
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [searchPlayers, setSearchPlayers] = useState<SearchPlayerOption[]>([])
+  const [searchTeams, setSearchTeams] = useState<SearchTeamOption[]>([])
+  const [searchLeagues, setSearchLeagues] = useState<SearchLeagueOption[]>([])
 
   useEffect(() => {
     if (!activeAdminPanel) return
@@ -161,6 +195,42 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     fetchAdminOptions()
   }, [activeAdminPanel])
 
+  useEffect(() => {
+    async function fetchSearchOptions() {
+      const [
+        { data: playersData },
+        { data: teamsData },
+        { data: leaguesData },
+      ] = await Promise.all([
+        supabase
+          .from('players')
+          .select('id, name, position, nationality, image_url')
+          .order('name', { ascending: true })
+          .limit(24),
+        supabase
+          .from('teams')
+          .select('id, name, logo_url, league')
+          .order('name', { ascending: true })
+          .limit(24),
+        supabase
+          .from('leagues')
+          .select('id, name, abbreviation, country_code')
+          .order('name', { ascending: true })
+          .limit(16),
+      ])
+
+      setSearchPlayers((playersData as SearchPlayerOption[]) || [])
+      setSearchTeams((teamsData as SearchTeamOption[]) || [])
+      setSearchLeagues((leaguesData as SearchLeagueOption[]) || [])
+    }
+
+    fetchSearchOptions()
+  }, [])
+
+  useEffect(() => {
+    setIsSearchOpen(false)
+  }, [pathname])
+
   function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     setAdminSaveMessage('')
     setIsAdminMenuOpen(false)
@@ -174,6 +244,65 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     setActiveAdminPanel(null)
     setAdminSaveMessage('')
     setAdminIsSaving(false)
+  }
+
+  const normalizedSearch = searchValue.trim().toLowerCase()
+  const playerMatches = normalizedSearch
+    ? searchPlayers.filter((player) =>
+        [player.name, player.position, player.nationality]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedSearch))
+      )
+    : []
+  const teamMatches = normalizedSearch
+    ? searchTeams.filter((team) =>
+        [team.name, team.league]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedSearch))
+      )
+    : []
+  const leagueMatches = normalizedSearch
+    ? searchLeagues.filter((league) =>
+        [league.name, league.abbreviation]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedSearch))
+      )
+    : []
+
+  const combinedMatches = [
+    ...playerMatches.slice(0, 4).map((player) => ({
+      id: `player-${player.id}`,
+      href: `/player/${player.id}`,
+      title: player.name,
+      subtitle: `${player.position || 'Player'}${player.nationality ? ` • ${player.nationality}` : ''}`,
+      kind: 'Player',
+      imageUrl: player.image_url || null,
+    })),
+    ...teamMatches.slice(0, 3).map((team) => ({
+      id: `team-${team.id}`,
+      href: `/team/${team.id}`,
+      title: team.name,
+      subtitle: team.league || 'Team',
+      kind: 'Team',
+      imageUrl: team.logo_url || null,
+    })),
+    ...leagueMatches.slice(0, 3).map((league) => ({
+      id: `league-${league.id}`,
+      href: `/league/${league.id}`,
+      title: league.name,
+      subtitle: league.abbreviation || 'League',
+      kind: 'League',
+      imageUrl: getSearchFlagUrl(league.country_code),
+    })),
+  ].slice(0, 8)
+
+  function submitGlobalSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!combinedMatches.length) return
+
+    router.push(combinedMatches[0].href)
+    setIsSearchOpen(false)
   }
 
   async function savePlayerForm() {
@@ -367,6 +496,138 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   </div>
                 ) : null}
               </div>
+            </div>
+          </div>
+
+          <div className="global-search-shell">
+            <div className="global-search-wrap">
+              <form className="global-search-form" onSubmit={submitGlobalSearch}>
+                <div className="global-search-input-wrap">
+                  <span className="global-search-icon" aria-hidden="true">
+                    ○
+                  </span>
+                  <input
+                    value={searchValue}
+                    onChange={(event) => setSearchValue(event.target.value)}
+                    onFocus={() => setIsSearchOpen(true)}
+                    className="global-search-input"
+                    placeholder="Search players, teams and leagues"
+                  />
+                </div>
+                <button type="submit" className="global-search-button">
+                  Search
+                </button>
+              </form>
+
+              {isSearchOpen ? (
+                <div className="global-search-panel">
+                  {normalizedSearch ? (
+                    <div className="global-search-results">
+                      <div className="global-search-heading">Search Results</div>
+                      {combinedMatches.length ? (
+                        combinedMatches.map((result) => (
+                          <Link
+                            key={result.id}
+                            href={result.href}
+                            className="global-search-result"
+                            onClick={() => setIsSearchOpen(false)}
+                          >
+                            <div className="global-search-result-thumb">
+                              {result.imageUrl ? (
+                                <img
+                                  src={result.imageUrl}
+                                  alt={result.title}
+                                  className="global-search-result-image"
+                                />
+                              ) : (
+                                <span className="global-search-result-fallback">
+                                  {result.title.slice(0, 1)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="global-search-result-copy">
+                              <span className="global-search-result-kind">{result.kind}</span>
+                              <span className="global-search-result-title">{result.title}</span>
+                              <span className="global-search-result-subtitle">{result.subtitle}</span>
+                            </div>
+                          </Link>
+                        ))
+                      ) : (
+                        <div className="global-search-empty">No matches found.</div>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="global-search-heading">Top Player Searches</div>
+                      <div className="global-search-card-row">
+                        {searchPlayers.slice(0, 6).map((player) => (
+                          <Link
+                            key={player.id}
+                            href={`/player/${player.id}`}
+                            className="global-search-card"
+                            onClick={() => setIsSearchOpen(false)}
+                          >
+                            {player.image_url ? (
+                              <img
+                                src={player.image_url}
+                                alt={player.name}
+                                className="global-search-card-image"
+                              />
+                            ) : (
+                              <div className="global-search-card-image global-search-card-image-fallback">
+                                {player.name.slice(0, 1)}
+                              </div>
+                            )}
+                            <div className="global-search-card-overlay" />
+                            <div className="global-search-card-copy">
+                              <span className="global-search-card-title">
+                                {player.name} {player.position ? `(${player.position})` : ''}
+                              </span>
+                              <span className="global-search-card-subtitle">
+                                {player.nationality || 'Player'}
+                              </span>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+
+                      <div className="global-search-heading global-search-heading-spaced">
+                        Popular Leagues
+                      </div>
+                      <div className="global-search-list">
+                        {searchLeagues.slice(0, 6).map((league) => (
+                          <Link
+                            key={league.id}
+                            href={`/league/${league.id}`}
+                            className="global-search-list-item"
+                            onClick={() => setIsSearchOpen(false)}
+                          >
+                            <div className="global-search-list-badge">
+                              {league.country_code ? (
+                                <img
+                                  src={getSearchFlagUrl(league.country_code) || ''}
+                                  alt={league.country_code}
+                                  className="global-search-list-flag"
+                                />
+                              ) : (
+                                <span className="global-search-list-initial">
+                                  {(league.abbreviation || league.name).slice(0, 1)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="global-search-list-copy">
+                              <span className="global-search-list-title">
+                                {league.abbreviation || league.name}
+                              </span>
+                              <span className="global-search-list-subtitle">League</span>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : null}
             </div>
           </div>
         </header>
