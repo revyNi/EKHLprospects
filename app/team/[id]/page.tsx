@@ -60,6 +60,11 @@ type TeamStatRecord = {
   gk_saves?: number | null
   gk_shots_against?: number | null
   gk_percentage?: number | null
+  goalie_wins?: number | null
+  goalie_losses?: number | null
+  goalie_overtime_losses?: number | null
+  goalie_shutouts?: number | null
+  goalie_goals_against?: number | null
   game_type?: string | null
 }
 
@@ -84,6 +89,10 @@ type TeamPlayerStat = {
   saves: number
   conceded: number
   gk_percentage: number
+  goalieWins: number
+  goalieLosses: number
+  goalieOvertimeLosses: number
+  goalieShutouts: number
 }
 
 type FranchiseStat = {
@@ -213,7 +222,7 @@ export default function TeamPage() {
   const [seasonOptions, setSeasonOptions] = useState<SeasonRecord[]>([])
   const [selectedSeasonId, setSelectedSeasonId] = useState('')
   const [activeView, setActiveView] = useState<'roster' | 'stats'>('roster')
-  const [positionFilter, setPositionFilter] = useState<'ALL' | 'G' | 'D' | 'C'>('ALL')
+  const [statsCategory, setStatsCategory] = useState<'skaters' | 'goalies'>('skaters')
   const [franchiseGameType, setFranchiseGameType] = useState<'regular' | 'playoffs'>('regular')
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -231,7 +240,7 @@ export default function TeamPage() {
         supabase.from('teams').select('*').eq('id', id).single(),
         supabase
           .from('stats')
-          .select('id, player_id, team_id, season_id, gp, goals, assists, points, hits, plus_minus, shots, toi, gk_saves, gk_shots_against, gk_percentage, game_type')
+          .select('id, player_id, team_id, season_id, gp, goals, assists, points, hits, plus_minus, shots, toi, gk_saves, gk_shots_against, gk_percentage, goalie_wins, goalie_losses, goalie_overtime_losses, goalie_shutouts, goalie_goals_against, game_type')
           .eq('team_id', id),
         supabase.from('seasons').select('id, name'),
       ])
@@ -297,7 +306,7 @@ export default function TeamPage() {
 
         const { data: careerStatsData, error: careerStatsError } = await supabase
           .from('stats')
-          .select('id, player_id, team_id, season_id, gp, goals, assists, points, hits, plus_minus, shots, toi, gk_saves, gk_shots_against, gk_percentage, game_type')
+          .select('id, player_id, team_id, season_id, gp, goals, assists, points, hits, plus_minus, shots, toi, gk_saves, gk_shots_against, gk_percentage, goalie_wins, goalie_losses, goalie_overtime_losses, goalie_shutouts, goalie_goals_against, game_type')
           .in('player_id', playerIds)
 
         if (careerStatsError) {
@@ -552,6 +561,10 @@ export default function TeamPage() {
         saves: 0,
         conceded: 0,
         gk_percentage: 0,
+        goalieWins: 0,
+        goalieLosses: 0,
+        goalieOvertimeLosses: 0,
+        goalieShutouts: 0,
       }
     }
 
@@ -569,9 +582,17 @@ export default function TeamPage() {
 
     const saves = Number(row.gk_saves) || 0
     const against = Number(row.gk_shots_against) || 0
+    const conceded =
+      row.goalie_goals_against !== null && row.goalie_goals_against !== undefined
+        ? Number(row.goalie_goals_against) || 0
+        : Math.max(against - saves, 0)
 
     acc[player.id].saves += saves
-    acc[player.id].conceded += against - saves
+    acc[player.id].conceded += conceded
+    acc[player.id].goalieWins += Number(row.goalie_wins) || 0
+    acc[player.id].goalieLosses += Number(row.goalie_losses) || 0
+    acc[player.id].goalieOvertimeLosses += Number(row.goalie_overtime_losses) || 0
+    acc[player.id].goalieShutouts += Number(row.goalie_shutouts) || 0
 
     if (row.gk_percentage) {
       acc[player.id].gk_percentage = Number(row.gk_percentage) || 0
@@ -579,14 +600,17 @@ export default function TeamPage() {
 
     return acc
   }, {})
-  const filteredTeamStats = teamStats
-    ? Object.values(teamStats)
-        .filter((player) => {
-          if (positionFilter === 'ALL') return true
-          return getPositionGroup(player.position) === positionFilter
-        })
-        .sort((a, b) => b.points - a.points)
-    : []
+  const teamStatRows = Object.values(teamStats)
+  const skaterStats = teamStatRows
+    .filter((player) => getPositionGroup(player.position) !== 'G')
+    .sort((a, b) => b.points - a.points || b.goals - a.goals || a.name.localeCompare(b.name))
+  const goalieStats = teamStatRows
+    .filter((player) => getPositionGroup(player.position) === 'G')
+    .sort((a, b) => {
+      const aPct = a.gk_percentage || (a.saves + a.conceded > 0 ? a.saves / (a.saves + a.conceded) : 0)
+      const bPct = b.gk_percentage || (b.saves + b.conceded > 0 ? b.saves / (b.saves + b.conceded) : 0)
+      return bPct - aPct || b.gp - a.gp || a.name.localeCompare(b.name)
+    })
   const franchisePlayerMap = new Map(
     [...franchisePlayers, ...teamPlayers].map((player) => [String(player.id), player])
   )
@@ -727,21 +751,6 @@ export default function TeamPage() {
             </div>
 
             <div style={headerControls}>
-              {activeView === 'stats' ? (
-                <select
-                  value={positionFilter}
-                  onChange={(event) =>
-                    setPositionFilter(event.target.value as 'ALL' | 'G' | 'D' | 'C')
-                  }
-                  style={seasonSelect}
-                >
-                  <option value="ALL">All Positions</option>
-                  <option value="G">G</option>
-                  <option value="D">D</option>
-                  <option value="C">C</option>
-                </select>
-              ) : null}
-
               <select
                 value={selectedSeasonId}
                 onChange={(event) => setSelectedSeasonId(event.target.value)}
@@ -763,7 +772,17 @@ export default function TeamPage() {
               <RosterSection title="FORWARDS" players={forwards} />
             </>
           ) : (
-            <StatsSection players={filteredTeamStats} />
+            <>
+              <StatsCategoryTabs
+                category={statsCategory}
+                onChange={setStatsCategory}
+              />
+              {statsCategory === 'skaters' ? (
+                <SkaterStatsSection players={skaterStats} />
+              ) : (
+                <GoalieStatsSection players={goalieStats} />
+              )}
+            </>
           )}
         </div>
 
@@ -786,6 +805,33 @@ export default function TeamPage() {
           </div>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+function StatsCategoryTabs({
+  category,
+  onChange,
+}: {
+  category: 'skaters' | 'goalies'
+  onChange: (value: 'skaters' | 'goalies') => void
+}) {
+  return (
+    <div style={statsTabsBar}>
+      <button
+        type="button"
+        onClick={() => onChange('skaters')}
+        style={category === 'skaters' ? statsTableTabActive : statsTableTab}
+      >
+        SKATER
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('goalies')}
+        style={category === 'goalies' ? statsTableTabActive : statsTableTab}
+      >
+        GOALIE
+      </button>
     </div>
   )
 }
@@ -837,7 +883,7 @@ function RosterSection({ title, players }: { title: string; players: RosterEntry
   )
 }
 
-function StatsSection({ players }: { players: TeamPlayerStat[] }) {
+function SkaterStatsSection({ players }: { players: TeamPlayerStat[] }) {
   return (
     <div style={rosterSection}>
       <div style={rosterTableWrap}>
@@ -896,7 +942,81 @@ function StatsSection({ players }: { players: TeamPlayerStat[] }) {
             {players.length === 0 ? (
               <tr style={rosterRow}>
                 <td colSpan={12} style={emptyRosterCell}>
-                  No player stats for this season and position filter.
+                  No skater stats for this season.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function GoalieStatsSection({ players }: { players: TeamPlayerStat[] }) {
+  return (
+    <div style={rosterSection}>
+      <div style={rosterTableWrap}>
+        <table style={rosterTable}>
+          <thead>
+            <tr style={rosterTableHead}>
+              <th style={rosterThNum}>#</th>
+              <th style={rosterThPlayer}>GOALIE</th>
+              <th style={statsTh}>GP</th>
+              <th style={statsTh}>GAA</th>
+              <th style={statsTh}>SV%</th>
+              <th style={statsTh}>W</th>
+              <th style={statsTh}>L</th>
+              <th style={statsTh}>OTL</th>
+              <th style={statsTh}>SO</th>
+              <th style={statsTh}>TOI</th>
+              <th style={statsTh}>SVS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {players.map((player) => {
+              const flagUrl = getFlagUrl(player.nationality, player.nationality)
+              const calcPct =
+                player.saves + player.conceded > 0
+                  ? (player.saves / (player.saves + player.conceded)).toFixed(3)
+                  : '0'
+              const savePct = player.gk_percentage ? player.gk_percentage.toFixed(3) : calcPct
+              const goalsAgainstAverage =
+                player.toi > 0
+                  ? ((player.conceded * 60) / player.toi).toFixed(2)
+                  : player.gp > 0
+                    ? (player.conceded / player.gp).toFixed(2)
+                    : '0.00'
+
+              return (
+                <tr key={player.id} style={rosterRow}>
+                  <td style={rosterTdNum}>{player.number || '-'}</td>
+                  <td style={rosterTdPlayer}>
+                    <div style={playerCell}>
+                      {flagUrl ? (
+                        <img src={flagUrl} alt={player.nationality || ''} style={rosterFlag} />
+                      ) : null}
+                      <Link href={`/player/${player.id}`} style={playerLink}>
+                        {player.name} ({formatPosition(player.position)})
+                      </Link>
+                    </div>
+                  </td>
+                  <td style={statsTd}>{player.gp}</td>
+                  <td style={statsTd}>{goalsAgainstAverage}</td>
+                  <td style={statsPtsTd}>{savePct}</td>
+                  <td style={statsTd}>{player.goalieWins}</td>
+                  <td style={statsTd}>{player.goalieLosses}</td>
+                  <td style={statsTd}>{player.goalieOvertimeLosses}</td>
+                  <td style={statsTd}>{player.goalieShutouts}</td>
+                  <td style={statsTd}>{player.toi}</td>
+                  <td style={statsTd}>{player.saves}</td>
+                </tr>
+              )
+            })}
+            {players.length === 0 ? (
+              <tr style={rosterRow}>
+                <td colSpan={11} style={emptyRosterCell}>
+                  No goalie stats for this season.
                 </td>
               </tr>
             ) : null}
@@ -1489,6 +1609,33 @@ const headerControls = {
   display: 'flex',
   gap: 8,
   alignItems: 'center',
+}
+
+const statsTabsBar = {
+  display: 'flex',
+  alignItems: 'flex-end',
+  gap: 1,
+  padding: '0 8px',
+  background: '#edf2f6',
+  borderTop: '1px solid #dbe3ea',
+}
+
+const statsTableTab = {
+  minWidth: 112,
+  height: 31,
+  border: 'none',
+  background: '#b8c4cf',
+  color: '#ffffff',
+  padding: '0 14px',
+  fontSize: 11,
+  fontWeight: 800,
+  cursor: 'pointer',
+  textAlign: 'center' as const,
+}
+
+const statsTableTabActive = {
+  ...statsTableTab,
+  background: '#123f58',
 }
 
 const seasonSelect = {

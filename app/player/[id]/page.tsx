@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../lib/supabaseClient'
+import { loadAdminStatus } from '../../../lib/adminClient'
 
 type TeamRecord = {
   id: string
@@ -352,6 +353,7 @@ export default function PlayerPage() {
   const [isEditorOpen, setIsEditorOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
   const [editorFacts, setEditorFacts] = useState({
     name: '',
     display_name: '',
@@ -365,6 +367,29 @@ export default function PlayerPage() {
   const [editorAwards, setEditorAwards] = useState<EditableAwardRecord[]>([])
   const [deletedStatIds, setDeletedStatIds] = useState<string[]>([])
   const [deletedAwardIds, setDeletedAwardIds] = useState<string[]>([])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function checkAdminStatus() {
+      const status = await loadAdminStatus()
+      if (!isMounted) return
+      setIsAdmin(status.isAdmin)
+    }
+
+    void checkAdminStatus()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      void checkAdminStatus()
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
 
   useEffect(() => {
     if (!playerId) return
@@ -624,7 +649,7 @@ export default function PlayerPage() {
     resolveLeagueRecord(teamLeague, leagues)
 
   function openEditor() {
-    if (!player) return
+    if (!player || !isAdmin) return
 
     setSaveMessage('')
     setDeletedStatIds([])
@@ -727,7 +752,7 @@ export default function PlayerPage() {
   }
 
   async function saveEditor() {
-    if (!player) return
+    if (!player || !isAdmin) return
 
     setIsSaving(true)
     setSaveMessage('')
@@ -988,11 +1013,13 @@ export default function PlayerPage() {
         </div>
       </div>
 
-      <div style={editorBar}>
-        <button type="button" onClick={openEditor} style={editorButton}>
-          Update Stats/Facts
-        </button>
-      </div>
+      {isAdmin ? (
+        <div style={editorBar}>
+          <button type="button" onClick={openEditor} style={editorButton}>
+            Update Stats/Facts
+          </button>
+        </div>
+      ) : null}
 
       <div style={topGrid}>
         <div style={sectionCard}>

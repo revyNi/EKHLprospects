@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
+import { loadAdminStatus } from '../lib/adminClient'
 
 type AdminPanelType = 'player' | 'stats' | 'league' | 'team' | null
 
@@ -263,6 +264,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [adminIsLoading, setAdminIsLoading] = useState(false)
   const [adminSaveMessage, setAdminSaveMessage] = useState('')
   const [adminIsSaving, setAdminIsSaving] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [playerForm, setPlayerForm] = useState<AdminPlayerForm>(emptyPlayerForm)
   const [statsForm, setStatsForm] = useState<AdminStatsForm>(emptyStatsForm)
   const [leagueForm, setLeagueForm] = useState<AdminLeagueForm>(emptyLeagueForm)
@@ -276,6 +278,36 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [leaderTeams, setLeaderTeams] = useState<SearchTeamOption[]>([])
   const [leaderStats, setLeaderStats] = useState<SidebarStatRecord[]>([])
   const [selectedLeaderLeague, setSelectedLeaderLeague] = useState('')
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function checkAdminStatus() {
+      const status = await loadAdminStatus()
+      if (!isMounted) return
+      setIsAdmin(status.isAdmin)
+    }
+
+    void checkAdminStatus()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      void checkAdminStatus()
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setIsAdminMenuOpen(false)
+      setActiveAdminPanel(null)
+    }
+  }, [isAdmin])
 
   useEffect(() => {
     if (!activeAdminPanel) return
@@ -365,7 +397,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     setIsSearchOpen(false)
   }, [pathname])
 
-  function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
+function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
+    if (!isAdmin) return
+
     setAdminSaveMessage('')
     setIsAdminMenuOpen(false)
     if (panel === 'player') setPlayerForm(emptyPlayerForm())
@@ -831,7 +865,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 })}
               </nav>
 
-              <div style={adminMenuWrap}>
+              {isAdmin ? <div style={adminMenuWrap}>
                 <button
                   type="button"
                   onClick={() => setIsAdminMenuOpen((value) => !value)}
@@ -857,7 +891,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     </button>
                   </div>
                 ) : null}
-              </div>
+              </div> : null}
             </div>
           </div>
 
