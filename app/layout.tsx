@@ -305,6 +305,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     setIsSearchOpen(false)
   }
 
+  function goToRandomPlayer() {
+    if (!searchPlayers.length) return
+
+    const randomPlayer = searchPlayers[Math.floor(Math.random() * searchPlayers.length)]
+    router.push(`/player/${randomPlayer.id}`)
+    setIsSearchOpen(false)
+  }
+
   async function savePlayerForm() {
     setAdminIsSaving(true)
     setAdminSaveMessage('')
@@ -501,23 +509,33 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
           <div className="global-search-shell">
             <div className="global-search-wrap">
-              <form className="global-search-form" onSubmit={submitGlobalSearch}>
-                <div className="global-search-input-wrap">
-                  <span className="global-search-icon" aria-hidden="true">
-                    ○
-                  </span>
-                  <input
-                    value={searchValue}
-                    onChange={(event) => setSearchValue(event.target.value)}
-                    onFocus={() => setIsSearchOpen(true)}
-                    className="global-search-input"
-                    placeholder="Search players, teams and leagues"
-                  />
-                </div>
-                <button type="submit" className="global-search-button">
-                  Search
+              <div className="global-search-row">
+                <form className="global-search-form" onSubmit={submitGlobalSearch}>
+                  <div className="global-search-input-wrap">
+                    <span className="global-search-icon" aria-hidden="true">
+                      ○
+                    </span>
+                    <input
+                      value={searchValue}
+                      onChange={(event) => setSearchValue(event.target.value)}
+                      onFocus={() => setIsSearchOpen(true)}
+                      className="global-search-input"
+                      placeholder="Search players, teams and leagues"
+                    />
+                  </div>
+                  <button type="submit" className="global-search-button">
+                    Search
+                  </button>
+                </form>
+
+                <button
+                  type="button"
+                  className="global-search-link-button"
+                  onClick={goToRandomPlayer}
+                >
+                  Random Player
                 </button>
-              </form>
+              </div>
 
               {isSearchOpen ? (
                 <div className="global-search-panel">
