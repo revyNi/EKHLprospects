@@ -44,13 +44,11 @@ button:hover {
 }
 
 .global-search-shell {
-  background: linear-gradient(180deg, #d6d8db 0%, #c7cbcf 100%);
-  border-bottom: 1px solid rgba(8, 28, 40, 0.12);
-  padding: 10px 12px 12px;
+  padding: 14px 12px 8px;
 }
 
 .global-search-wrap {
-  max-width: 820px;
+  max-width: 1040px;
   margin: 0 auto;
   position: relative;
 }
@@ -59,6 +57,7 @@ button:hover {
   display: flex;
   align-items: center;
   gap: 18px;
+  max-width: 760px;
 }
 
 .global-search-form {
