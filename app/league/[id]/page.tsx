@@ -285,7 +285,7 @@ export default function LeagueDetailPage() {
       ] = await Promise.all([
         supabase
           .from('teams')
-          .select('id, name, logo_url, country, league')
+          .select('id, name, logo_url, country, country_code, league')
           .in('league', leagueNames.length ? leagueNames : [leagueRecord.name])
           .order('name', { ascending: true }),
         supabase
@@ -395,6 +395,7 @@ export default function LeagueDetailPage() {
   const flagUrl = getFlagUrl(null, league.country_code)
   const leagueShortName = league.abbreviation || league.short_name || league.name
   const leagueDisplayName = league.display_name || league.full_name || league.name
+  const statsPageHref = `/league/${encodeURIComponent(league.id)}/stats`
   const teamsById = new Map(teams.map((team) => [team.id, team]))
   const playersById = new Map(leaguePlayers.map((player) => [player.id, player]))
   const seasonsById = new Map(allSeasons.map((season) => [String(season.id), season.name]))
@@ -708,11 +709,13 @@ export default function LeagueDetailPage() {
             title={`${selectedSeasonLabel} ${leagueShortName.toUpperCase()} PLAYER STATS`}
             players={topSkaters}
             kind="skater"
+            showMoreHref={`${statsPageHref}?context=${encodeURIComponent(`${selectedSeasonLabel} ${leagueShortName} Player Stats`)}`}
           />
           <LeaguePlayerStatsCard
             title={`${selectedSeasonLabel} ${leagueShortName.toUpperCase()} GOALIE STATS`}
             players={topGoalies}
             kind="goalie"
+            showMoreHref={`${statsPageHref}?context=${encodeURIComponent(`${selectedSeasonLabel} ${leagueShortName} Goalie Stats`)}`}
           />
         </div>
 
@@ -720,6 +723,7 @@ export default function LeagueDetailPage() {
           title={`${leagueShortName.toUpperCase()} GAMES`}
           matches={filteredMatches}
           teamsById={teamsById}
+          showMoreHref={`${statsPageHref}?context=${encodeURIComponent(`${leagueShortName} Games`)}`}
         />
 
         <LeagueNationalityHistoryCard nationalities={nationalityHistory} />
@@ -730,6 +734,7 @@ export default function LeagueDetailPage() {
           onGameTypeChange={setAllTimeGameType}
           stats={allTimePlayerTotals}
           seasonStats={allTimeSeasonStats}
+          showMoreHref={statsPageHref}
         />
 
         <LeagueChampionsCard
@@ -750,10 +755,12 @@ function LeaguePlayerStatsCard({
   title,
   players,
   kind,
+  showMoreHref,
 }: {
   title: string
   players: LeaguePlayerStat[]
   kind: 'skater' | 'goalie'
+  showMoreHref: string
 }) {
   return (
     <div style={leaderboardCard}>
@@ -820,7 +827,9 @@ function LeaguePlayerStatsCard({
           ) : null}
         </tbody>
       </table>
-      <div style={showMoreBar}>SHOW MORE</div>
+      <Link href={showMoreHref} style={showMoreBar}>
+        SHOW MORE
+      </Link>
     </div>
   )
 }
@@ -829,10 +838,12 @@ function LeagueMatchesCard({
   title,
   matches,
   teamsById,
+  showMoreHref,
 }: {
   title: string
   matches: MatchRecord[]
   teamsById: Map<string, TeamRecord>
+  showMoreHref: string
 }) {
   return (
     <div style={matchesCard}>
@@ -894,7 +905,9 @@ function LeagueMatchesCard({
           ) : null}
         </tbody>
       </table>
-      <div style={showMoreBar}>SHOW MORE</div>
+      <Link href={showMoreHref} style={showMoreBar}>
+        SHOW MORE
+      </Link>
     </div>
   )
 }
@@ -934,13 +947,17 @@ function LeagueAllTimeSection({
   onGameTypeChange,
   stats,
   seasonStats,
+  showMoreHref,
 }: {
   leagueShortName: string
   gameType: 'regular' | 'playoffs'
   onGameTypeChange: (value: 'regular' | 'playoffs') => void
   stats: LeagueFranchiseStat[]
   seasonStats: LeagueFranchiseSeasonStat[]
+  showMoreHref: string
 }) {
+  const buildContextHref = (label: string) =>
+    `${showMoreHref}?context=${encodeURIComponent(label)}`
   const sortBy = (key: keyof Pick<LeagueFranchiseStat, 'gp' | 'goals' | 'assists' | 'points' | 'hits'>) =>
     [...stats].sort((a, b) => Number(b[key]) - Number(a[key]) || b.points - a.points).slice(0, 5)
   const pointsPerGame = [...stats]
@@ -971,33 +988,37 @@ function LeagueAllTimeSection({
       </div>
 
       <div style={leaderboardGrid}>
-        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME POINTS`} stats={sortBy('points')} valueColumn="TP" rankBy="points" />
-        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME GOALS`} stats={sortBy('goals')} valueColumn="TP" rankBy="goals" />
-        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME ASSISTS`} stats={sortBy('assists')} valueColumn="TP" rankBy="assists" />
-        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME HITS`} stats={sortBy('hits')} valueColumn="HITS" rankBy="hits" />
-        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME GAMES PLAYED`} stats={sortBy('gp')} valueColumn="TP" rankBy="gp" />
-        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME POINTS PER GAME`} stats={pointsPerGame} valueColumn="PPG" rankBy="ppg" />
+        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME POINTS`} stats={sortBy('points')} valueColumn="TP" rankBy="points" showMoreHref={buildContextHref(`${leagueShortName} All-Time Points`)} />
+        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME GOALS`} stats={sortBy('goals')} valueColumn="TP" rankBy="goals" showMoreHref={buildContextHref(`${leagueShortName} All-Time Goals`)} />
+        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME ASSISTS`} stats={sortBy('assists')} valueColumn="TP" rankBy="assists" showMoreHref={buildContextHref(`${leagueShortName} All-Time Assists`)} />
+        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME HITS`} stats={sortBy('hits')} valueColumn="HITS" rankBy="hits" showMoreHref={buildContextHref(`${leagueShortName} All-Time Hits`)} />
+        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME GAMES PLAYED`} stats={sortBy('gp')} valueColumn="TP" rankBy="gp" showMoreHref={buildContextHref(`${leagueShortName} All-Time Games Played`)} />
+        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME POINTS PER GAME`} stats={pointsPerGame} valueColumn="PPG" rankBy="ppg" showMoreHref={buildContextHref(`${leagueShortName} All-Time Points Per Game`)} />
       </div>
 
       <LeagueAllTimeSeasonCard
         title={`${leagueShortName.toUpperCase()} ALL-TIME POINTS PER SEASON`}
         stats={pointsPerSeason}
         rankBy="points"
+        showMoreHref={buildContextHref(`${leagueShortName} All-Time Points Per Season`)}
       />
       <LeagueAllTimeSeasonCard
         title={`${leagueShortName.toUpperCase()} ALL-TIME GOALS PER SEASON`}
         stats={[...seasonStats].sort((a, b) => b.goals - a.goals || b.points - a.points).slice(0, 5)}
         rankBy="goals"
+        showMoreHref={buildContextHref(`${leagueShortName} All-Time Goals Per Season`)}
       />
       <LeagueAllTimeSeasonCard
         title={`${leagueShortName.toUpperCase()} ALL-TIME ASSISTS PER SEASON`}
         stats={[...seasonStats].sort((a, b) => b.assists - a.assists || b.points - a.points).slice(0, 5)}
         rankBy="assists"
+        showMoreHref={buildContextHref(`${leagueShortName} All-Time Assists Per Season`)}
       />
       <LeagueAllTimeSeasonCard
         title={`${leagueShortName.toUpperCase()} ALL-TIME HITS PER SEASON`}
         stats={[...seasonStats].sort((a, b) => b.hits - a.hits || b.points - a.points).slice(0, 5)}
         rankBy="hits"
+        showMoreHref={buildContextHref(`${leagueShortName} All-Time Hits Per Season`)}
       />
     </div>
   )
@@ -1010,11 +1031,13 @@ function LeagueAllTimeCard({
   stats,
   valueColumn,
   rankBy,
+  showMoreHref,
 }: {
   title: string
   stats: LeagueFranchiseStat[]
   valueColumn: 'TP' | 'HITS' | 'PPG'
   rankBy: LeagueRankKey
+  showMoreHref: string
 }) {
   return (
     <div style={leaderboardCard}>
@@ -1067,7 +1090,9 @@ function LeagueAllTimeCard({
           ) : null}
         </tbody>
       </table>
-      <div style={showMoreBar}>SHOW MORE</div>
+      <Link href={showMoreHref} style={showMoreBar}>
+        SHOW MORE
+      </Link>
     </div>
   )
 }
@@ -1076,10 +1101,12 @@ function LeagueAllTimeSeasonCard({
   title,
   stats,
   rankBy,
+  showMoreHref,
 }: {
   title: string
   stats: LeagueFranchiseSeasonStat[]
   rankBy: LeagueRankKey
+  showMoreHref: string
 }) {
   return (
     <div style={matchesCard}>
@@ -1138,7 +1165,9 @@ function LeagueAllTimeSeasonCard({
           ) : null}
         </tbody>
       </table>
-      <div style={showMoreBar}>SHOW MORE</div>
+      <Link href={showMoreHref} style={showMoreBar}>
+        SHOW MORE
+      </Link>
     </div>
   )
 }
@@ -1580,6 +1609,8 @@ const showMoreBar = {
   fontWeight: 600,
   letterSpacing: '-0.01em',
   padding: '11px 12px',
+  textDecoration: 'none',
+  display: 'block',
 }
 
 const errorText = {

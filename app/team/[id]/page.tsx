@@ -469,6 +469,7 @@ export default function TeamPage() {
   const forwards = filteredRoster.filter((player) => getPositionGroup(player.position) === 'C')
   const currentSeasonName =
     seasonOptions.find((season) => season.id === selectedSeasonId)?.name || 'Current'
+  const teamStatsPageHref = `/team/${encodeURIComponent(team.id)}/stats`
   const nationalityRows = Object.values(
     filteredRoster.reduce<Record<string, { code: string; count: number }>>((acc, player) => {
       const code = (player.nationality || 'Unknown').trim().toUpperCase()
@@ -801,6 +802,7 @@ export default function TeamPage() {
               onGameTypeChange={setFranchiseGameType}
               stats={franchiseStats}
               seasonStats={franchiseSeasonStats}
+              showMoreHref={teamStatsPageHref}
             />
           </div>
         ) : null}
@@ -1191,12 +1193,16 @@ function FranchiseAllTime({
   onGameTypeChange,
   stats,
   seasonStats,
+  showMoreHref,
 }: {
   gameType: 'regular' | 'playoffs'
   onGameTypeChange: (value: 'regular' | 'playoffs') => void
   stats: FranchiseStat[]
   seasonStats: FranchiseSeasonStat[]
+  showMoreHref: string
 }) {
+  const buildContextHref = (label: string) =>
+    `${showMoreHref}?context=${encodeURIComponent(label)}`
   const sortBy = (key: keyof Pick<FranchiseStat, 'gp' | 'goals' | 'assists' | 'points' | 'hits'>) =>
     [...stats].sort((a, b) => Number(b[key]) - Number(a[key]) || b.points - a.points).slice(0, 5)
   const pointsPerGame = [...stats]
@@ -1227,29 +1233,32 @@ function FranchiseAllTime({
       </div>
 
       <div style={franchiseGrid}>
-        <FranchiseCard title="FRANCHISE ALL-TIME POINTS" stats={sortBy('points')} valueColumn="TP" rankBy="points" />
-        <FranchiseCard title="FRANCHISE ALL-TIME GOALS" stats={sortBy('goals')} valueColumn="TP" rankBy="goals" />
-        <FranchiseCard title="FRANCHISE ALL-TIME ASSISTS" stats={sortBy('assists')} valueColumn="TP" rankBy="assists" />
-        <FranchiseCard title="FRANCHISE ALL-TIME HITS" stats={sortBy('hits')} valueColumn="HITS" rankBy="hits" />
-        <FranchiseCard title="FRANCHISE ALL-TIME GAMES PLAYED" stats={sortBy('gp')} valueColumn="TP" rankBy="gp" />
-        <FranchiseCard title="FRANCHISE ALL-TIME POINTS PER GAME" stats={pointsPerGame} valueColumn="PPG" rankBy="ppg" />
+        <FranchiseCard title="FRANCHISE ALL-TIME POINTS" stats={sortBy('points')} valueColumn="TP" rankBy="points" showMoreHref={buildContextHref('Franchise All-Time Points')} />
+        <FranchiseCard title="FRANCHISE ALL-TIME GOALS" stats={sortBy('goals')} valueColumn="TP" rankBy="goals" showMoreHref={buildContextHref('Franchise All-Time Goals')} />
+        <FranchiseCard title="FRANCHISE ALL-TIME ASSISTS" stats={sortBy('assists')} valueColumn="TP" rankBy="assists" showMoreHref={buildContextHref('Franchise All-Time Assists')} />
+        <FranchiseCard title="FRANCHISE ALL-TIME HITS" stats={sortBy('hits')} valueColumn="HITS" rankBy="hits" showMoreHref={buildContextHref('Franchise All-Time Hits')} />
+        <FranchiseCard title="FRANCHISE ALL-TIME GAMES PLAYED" stats={sortBy('gp')} valueColumn="TP" rankBy="gp" showMoreHref={buildContextHref('Franchise All-Time Games Played')} />
+        <FranchiseCard title="FRANCHISE ALL-TIME POINTS PER GAME" stats={pointsPerGame} valueColumn="PPG" rankBy="ppg" showMoreHref={buildContextHref('Franchise All-Time Points Per Game')} />
       </div>
 
-      <FranchiseSeasonCard title="FRANCHISE ALL-TIME POINTS PER SEASON" stats={pointsPerSeason} rankBy="points" />
+      <FranchiseSeasonCard title="FRANCHISE ALL-TIME POINTS PER SEASON" stats={pointsPerSeason} rankBy="points" showMoreHref={buildContextHref('Franchise All-Time Points Per Season')} />
       <FranchiseSeasonCard
         title="FRANCHISE ALL-TIME GOALS PER SEASON"
         stats={[...seasonStats].sort((a, b) => b.goals - a.goals || b.points - a.points).slice(0, 5)}
         rankBy="goals"
+        showMoreHref={buildContextHref('Franchise All-Time Goals Per Season')}
       />
       <FranchiseSeasonCard
         title="FRANCHISE ALL-TIME ASSISTS PER SEASON"
         stats={[...seasonStats].sort((a, b) => b.assists - a.assists || b.points - a.points).slice(0, 5)}
         rankBy="assists"
+        showMoreHref={buildContextHref('Franchise All-Time Assists Per Season')}
       />
       <FranchiseSeasonCard
         title="FRANCHISE ALL-TIME HITS PER SEASON"
         stats={[...seasonStats].sort((a, b) => b.hits - a.hits || b.points - a.points).slice(0, 5)}
         rankBy="hits"
+        showMoreHref={buildContextHref('Franchise All-Time Hits Per Season')}
       />
     </div>
   )
@@ -1260,11 +1269,13 @@ function FranchiseCard({
   stats,
   valueColumn,
   rankBy,
+  showMoreHref,
 }: {
   title: string
   stats: FranchiseStat[]
   valueColumn: 'TP' | 'HITS' | 'PPG'
   rankBy: FranchiseRankKey
+  showMoreHref: string
 }) {
   return (
     <div style={franchiseCard}>
@@ -1317,7 +1328,9 @@ function FranchiseCard({
           ) : null}
         </tbody>
       </table>
-      <div style={showMoreBar}>SHOW MORE</div>
+      <Link href={showMoreHref} style={showMoreBar}>
+        SHOW MORE
+      </Link>
     </div>
   )
 }
@@ -1326,10 +1339,12 @@ function FranchiseSeasonCard({
   title,
   stats,
   rankBy,
+  showMoreHref,
 }: {
   title: string
   stats: FranchiseSeasonStat[]
   rankBy: FranchiseRankKey
+  showMoreHref: string
 }) {
   return (
     <div style={franchiseCardWide}>
@@ -1388,7 +1403,9 @@ function FranchiseSeasonCard({
           ) : null}
         </tbody>
       </table>
-      <div style={showMoreBar}>SHOW MORE</div>
+      <Link href={showMoreHref} style={showMoreBar}>
+        SHOW MORE
+      </Link>
     </div>
   )
 }
@@ -1988,4 +2005,6 @@ const showMoreBar = {
   fontWeight: 600,
   letterSpacing: '-0.01em',
   padding: '11px 12px',
+  textDecoration: 'none',
+  display: 'block',
 }

@@ -983,7 +983,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     const rowsToSave = standingsForm.rows
       .filter((row) => row.team_id)
       .map((row) => ({
-        id: row.id || undefined,
+        id: row.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined),
         league_id: standingsForm.league_id,
         season_id: standingsForm.season_id,
         team_id: row.team_id,
