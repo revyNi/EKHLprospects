@@ -386,7 +386,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         supabase.from('seasons').select('id, name').order('name', { ascending: true }),
         supabase
           .from('leagues')
-          .select('id, name, abbreviation, logo_url')
+          .select('id, name, logo_url')
           .order('name', { ascending: true }),
       ])
 
@@ -1754,8 +1754,8 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                       >
                         <option value="">No league</option>
                         {adminLeagues.map((league) => (
-                          <option key={league.id} value={league.abbreviation || league.name}>
-                            {league.abbreviation ? `${league.abbreviation} - ${league.name}` : league.name}
+                          <option key={league.id} value={league.name}>
+                            {league.name}
                           </option>
                         ))}
                       </select>
