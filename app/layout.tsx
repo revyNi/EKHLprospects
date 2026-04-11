@@ -265,6 +265,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [adminSaveMessage, setAdminSaveMessage] = useState('')
   const [adminIsSaving, setAdminIsSaving] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [viewerEmail, setViewerEmail] = useState<string | null>(null)
   const [playerForm, setPlayerForm] = useState<AdminPlayerForm>(emptyPlayerForm)
   const [statsForm, setStatsForm] = useState<AdminStatsForm>(emptyStatsForm)
   const [leagueForm, setLeagueForm] = useState<AdminLeagueForm>(emptyLeagueForm)
@@ -282,18 +283,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     let isMounted = true
 
-    async function checkAdminStatus() {
+    async function loadViewerStatus() {
       const status = await loadAdminStatus()
       if (!isMounted) return
       setIsAdmin(status.isAdmin)
+      setViewerEmail(status.email)
     }
 
-    void checkAdminStatus()
+    void loadViewerStatus()
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(() => {
-      void checkAdminStatus()
+      void loadViewerStatus()
     })
 
     return () => {
@@ -308,6 +310,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       setActiveAdminPanel(null)
     }
   }, [isAdmin])
+
+  async function signOutViewer() {
+    await supabase.auth.signOut()
+    setIsAdmin(false)
+    setViewerEmail(null)
+    setIsAdminMenuOpen(false)
+    setActiveAdminPanel(null)
+    router.push('/')
+  }
 
   useEffect(() => {
     if (!activeAdminPanel) return
@@ -831,7 +842,26 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
         <header style={header}>
           <div style={topBar}>
             <div style={topBarInner}>
-              <span style={topBarText}>Help</span>
+              <div style={topBarActions}>
+                <span style={topBarText}>Help</span>
+                {viewerEmail ? (
+                  <>
+                    <span style={topBarUserText}>{viewerEmail}</span>
+                    <button type="button" onClick={signOutViewer} style={topBarGhostButton}>
+                      Sign out
+                    </button>
+                  </>
+                ) : (
+                  <div style={topBarAuthPills}>
+                    <Link href="/sign-up" style={topBarPrimaryAuthLink}>
+                      Sign up
+                    </Link>
+                    <Link href="/sign-in" style={topBarSecondaryAuthLink}>
+                      Sign in
+                    </Link>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1559,10 +1589,64 @@ const topBarInner: React.CSSProperties = {
   padding: '0 28px',
 }
 
+const topBarActions: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+}
+
 const topBarText: React.CSSProperties = {
   color: '#97c9e6',
   fontSize: 15,
   fontWeight: 700,
+}
+
+const topBarUserText: React.CSSProperties = {
+  color: '#d7e6ef',
+  fontSize: 13,
+  fontWeight: 600,
+}
+
+const topBarAuthPills: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  marginLeft: 6,
+  padding: 3,
+  border: '1px solid rgba(255,255,255,0.4)',
+  borderRadius: 999,
+}
+
+const topBarPrimaryAuthLink: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: 64,
+  height: 28,
+  padding: '0 14px',
+  borderRadius: 999,
+  background: '#28a84d',
+  color: '#fff',
+  textDecoration: 'none',
+  fontSize: 13,
+  fontWeight: 800,
+}
+
+const topBarSecondaryAuthLink: React.CSSProperties = {
+  ...topBarPrimaryAuthLink,
+  background: '#173a4c',
+  border: '1px solid rgba(255,255,255,0.22)',
+}
+
+const topBarGhostButton: React.CSSProperties = {
+  border: '1px solid rgba(255,255,255,0.35)',
+  background: 'transparent',
+  color: '#fff',
+  borderRadius: 999,
+  height: 28,
+  padding: '0 14px',
+  fontSize: 13,
+  fontWeight: 800,
 }
 
 const mainHeader: React.CSSProperties = {

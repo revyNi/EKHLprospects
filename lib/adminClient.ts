@@ -7,7 +7,11 @@ export async function loadAdminStatus() {
   } = await supabase.auth.getUser()
 
   if (userError || !user) {
-    return { isAdmin: false, userId: null as string | null }
+    return {
+      isAdmin: false,
+      userId: null as string | null,
+      email: null as string | null,
+    }
   }
 
   const { data, error } = await supabase
@@ -17,11 +21,16 @@ export async function loadAdminStatus() {
     .maybeSingle()
 
   if (error) {
-    return { isAdmin: false, userId: user.id }
+    return {
+      isAdmin: false,
+      userId: user.id,
+      email: user.email ?? null,
+    }
   }
 
   return {
     isAdmin: Boolean(data),
     userId: user.id,
+    email: user.email ?? null,
   }
 }
