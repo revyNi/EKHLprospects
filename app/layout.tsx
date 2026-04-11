@@ -141,9 +141,10 @@ type AdminTeamForm = {
 }
 
 const pages = [
-  { name: 'Players', href: '/' },
+  { name: 'Home', href: '/' },
   { name: 'Teams', href: '/team' },
   { name: 'Leagues', href: '/league' },
+  { name: 'Awards', href: '/awards' },
 ]
 
 const emptyPlayerForm = (): AdminPlayerForm => ({
@@ -842,6 +843,9 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
         <header style={header}>
           <div style={topBar}>
             <div style={topBarInner}>
+              <div style={topBarDisclaimer}>
+                This project is inspired by Elite Prospects and is not affiliated with or endorsed by them.
+              </div>
               <div style={topBarActions}>
                 <span style={topBarText}>Help</span>
                 {viewerEmail ? (
@@ -1584,9 +1588,17 @@ const topBarInner: React.CSSProperties = {
   margin: '0 auto',
   display: 'flex',
   alignItems: 'center',
-  justifyContent: 'flex-end',
+  justifyContent: 'space-between',
   height: 38,
   padding: '0 28px',
+}
+
+const topBarDisclaimer: React.CSSProperties = {
+  color: 'rgba(223, 236, 245, 0.82)',
+  fontSize: 11,
+  fontWeight: 600,
+  lineHeight: 1.2,
+  paddingRight: 16,
 }
 
 const topBarActions: React.CSSProperties = {
