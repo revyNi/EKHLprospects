@@ -8,7 +8,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
 import { loadAdminStatus } from '../lib/adminClient'
 
-type AdminPanelType = 'player' | 'stats' | 'league' | 'team' | null
+type AdminPanelType = 'player' | 'stats' | 'league' | 'team' | 'standings' | null
 
 type AdminPlayerOption = {
   id: string
@@ -140,6 +140,30 @@ type AdminTeamForm = {
   arena_location: string
 }
 
+type AdminStandingRowForm = {
+  id?: string
+  team_id: string
+  rank: string
+  gp: string
+  wins: string
+  losses: string
+  overtime_losses: string
+  regulation_wins: string
+  points: string
+  goals_for: string
+  goals_against: string
+  goal_difference: string
+  sogf: string
+  soga: string
+  shot_percentage: string
+}
+
+type AdminStandingsForm = {
+  league_id: string
+  season_id: string
+  rows: AdminStandingRowForm[]
+}
+
 const pages = [
   { name: 'Home', href: '/' },
   { name: 'Teams', href: '/team' },
@@ -203,6 +227,29 @@ const emptyTeamForm = (): AdminTeamForm => ({
   founded: '',
   arena_name: '',
   arena_location: '',
+})
+
+const emptyStandingRow = (): AdminStandingRowForm => ({
+  team_id: '',
+  rank: '',
+  gp: '',
+  wins: '',
+  losses: '',
+  overtime_losses: '',
+  regulation_wins: '',
+  points: '',
+  goals_for: '',
+  goals_against: '',
+  goal_difference: '',
+  sogf: '',
+  soga: '',
+  shot_percentage: '',
+})
+
+const emptyStandingsForm = (): AdminStandingsForm => ({
+  league_id: '',
+  season_id: '',
+  rows: [emptyStandingRow()],
 })
 
 function toNullableNumber(value: string) {
@@ -271,6 +318,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [statsForm, setStatsForm] = useState<AdminStatsForm>(emptyStatsForm)
   const [leagueForm, setLeagueForm] = useState<AdminLeagueForm>(emptyLeagueForm)
   const [teamForm, setTeamForm] = useState<AdminTeamForm>(emptyTeamForm)
+  const [standingsForm, setStandingsForm] = useState<AdminStandingsForm>(emptyStandingsForm)
   const [searchValue, setSearchValue] = useState('')
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchPlayers, setSearchPlayers] = useState<SearchPlayerOption[]>([])
@@ -353,6 +401,60 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }, [activeAdminPanel])
 
   useEffect(() => {
+    if (activeAdminPanel !== 'standings') return
+    if (!standingsForm.league_id || !standingsForm.season_id) return
+
+    async function fetchExistingStandings() {
+      setAdminIsLoading(true)
+
+      const { data, error } = await supabase
+        .from('league_standings')
+        .select('id, team_id, rank, gp, wins, losses, overtime_losses, regulation_wins, points, goals_for, goals_against, goal_difference, sogf, soga, shot_percentage')
+        .eq('league_id', standingsForm.league_id)
+        .eq('season_id', standingsForm.season_id)
+        .order('rank', { ascending: true })
+
+      if (error) {
+        setAdminSaveMessage(error.message)
+        setAdminIsLoading(false)
+        return
+      }
+
+      const loadedRows = ((data as Record<string, unknown>[]) || []).map((row) => ({
+        id: String(row.id || ''),
+        team_id: String(row.team_id || ''),
+        rank: row.rank === null || row.rank === undefined ? '' : String(row.rank),
+        gp: row.gp === null || row.gp === undefined ? '' : String(row.gp),
+        wins: row.wins === null || row.wins === undefined ? '' : String(row.wins),
+        losses: row.losses === null || row.losses === undefined ? '' : String(row.losses),
+        overtime_losses:
+          row.overtime_losses === null || row.overtime_losses === undefined ? '' : String(row.overtime_losses),
+        regulation_wins:
+          row.regulation_wins === null || row.regulation_wins === undefined ? '' : String(row.regulation_wins),
+        points: row.points === null || row.points === undefined ? '' : String(row.points),
+        goals_for: row.goals_for === null || row.goals_for === undefined ? '' : String(row.goals_for),
+        goals_against:
+          row.goals_against === null || row.goals_against === undefined ? '' : String(row.goals_against),
+        goal_difference:
+          row.goal_difference === null || row.goal_difference === undefined ? '' : String(row.goal_difference),
+        sogf: row.sogf === null || row.sogf === undefined ? '' : String(row.sogf),
+        soga: row.soga === null || row.soga === undefined ? '' : String(row.soga),
+        shot_percentage:
+          row.shot_percentage === null || row.shot_percentage === undefined ? '' : String(row.shot_percentage),
+      }))
+
+      setStandingsForm((current) => ({
+        ...current,
+        rows: loadedRows.length ? loadedRows : [emptyStandingRow()],
+      }))
+      setAdminSaveMessage(loadedRows.length ? 'Loaded existing standings for this league and season.' : '')
+      setAdminIsLoading(false)
+    }
+
+    void fetchExistingStandings()
+  }, [activeAdminPanel, standingsForm.league_id, standingsForm.season_id])
+
+  useEffect(() => {
     async function fetchSearchOptions() {
       const [
         { data: playersData },
@@ -418,6 +520,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     if (panel === 'stats') setStatsForm(emptyStatsForm())
     if (panel === 'league') setLeagueForm(emptyLeagueForm())
     if (panel === 'team') setTeamForm(emptyTeamForm())
+    if (panel === 'standings') setStandingsForm(emptyStandingsForm())
     setActiveAdminPanel(panel)
   }
 
@@ -837,6 +940,86 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     setAdminIsSaving(false)
   }
 
+  function updateStandingsRow(index: number, field: keyof AdminStandingRowForm, value: string) {
+    setStandingsForm((current) => ({
+      ...current,
+      rows: current.rows.map((row, rowIndex) =>
+        rowIndex === index
+          ? {
+              ...row,
+              [field]: value,
+            }
+          : row
+      ),
+    }))
+  }
+
+  function addStandingsRow() {
+    setStandingsForm((current) => ({
+      ...current,
+      rows: [...current.rows, emptyStandingRow()],
+    }))
+  }
+
+  function removeStandingsRow(index: number) {
+    setStandingsForm((current) => ({
+      ...current,
+      rows:
+        current.rows.length === 1
+          ? [emptyStandingRow()]
+          : current.rows.filter((_, rowIndex) => rowIndex !== index),
+    }))
+  }
+
+  async function saveStandingsForm() {
+    if (!standingsForm.league_id || !standingsForm.season_id) {
+      setAdminSaveMessage('Select a league and season first.')
+      return
+    }
+
+    setAdminIsSaving(true)
+    setAdminSaveMessage('')
+
+    const rowsToSave = standingsForm.rows
+      .filter((row) => row.team_id)
+      .map((row) => ({
+        id: row.id || undefined,
+        league_id: standingsForm.league_id,
+        season_id: standingsForm.season_id,
+        team_id: row.team_id,
+        rank: toNullableNumber(row.rank),
+        gp: toNullableNumber(row.gp),
+        wins: toNullableNumber(row.wins),
+        losses: toNullableNumber(row.losses),
+        overtime_losses: toNullableNumber(row.overtime_losses),
+        regulation_wins: toNullableNumber(row.regulation_wins),
+        points: toNullableNumber(row.points),
+        goals_for: toNullableNumber(row.goals_for),
+        goals_against: toNullableNumber(row.goals_against),
+        goal_difference: toNullableNumber(row.goal_difference),
+        sogf: toNullableNumber(row.sogf),
+        soga: toNullableNumber(row.soga),
+        shot_percentage: toNullableNumber(row.shot_percentage),
+      }))
+
+    if (!rowsToSave.length) {
+      setAdminSaveMessage('Add at least one team row to save standings.')
+      setAdminIsSaving(false)
+      return
+    }
+
+    const { error } = await supabase.from('league_standings').upsert(rowsToSave)
+
+    if (error) {
+      setAdminSaveMessage(error.message)
+      setAdminIsSaving(false)
+      return
+    }
+
+    setAdminSaveMessage('Standings saved.')
+    setAdminIsSaving(false)
+  }
+
   return (
     <html lang="en">
       <body style={body}>
@@ -922,6 +1105,9 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                     </button>
                     <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('team')}>
                       Add Team
+                    </button>
+                    <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('standings')}>
+                      Add/Update Standings
                     </button>
                   </div>
                 ) : null}
@@ -1243,6 +1429,8 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                     ? 'Add Player'
                     : activeAdminPanel === 'stats'
                       ? 'Add Roster/Stats'
+                      : activeAdminPanel === 'standings'
+                        ? 'Add/Update Standings'
                       : activeAdminPanel === 'team'
                         ? 'Add Team'
                       : 'Add League'}
@@ -1446,6 +1634,106 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                 </div>
               ) : null}
 
+              {!adminIsLoading && activeAdminPanel === 'standings' ? (
+                <div style={modalBody}>
+                  <div style={formGrid}>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>League</span>
+                      <select
+                        value={standingsForm.league_id}
+                        onChange={(event) =>
+                          setStandingsForm((current) => ({
+                            ...current,
+                            league_id: event.target.value,
+                            rows: [emptyStandingRow()],
+                          }))
+                        }
+                        style={fieldInput}
+                      >
+                        <option value="">Select league</option>
+                        {adminLeagues.map((league) => (
+                          <option key={league.id} value={league.id}>
+                            {league.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Season</span>
+                      <select
+                        value={standingsForm.season_id}
+                        onChange={(event) =>
+                          setStandingsForm((current) => ({
+                            ...current,
+                            season_id: event.target.value,
+                            rows: [emptyStandingRow()],
+                          }))
+                        }
+                        style={fieldInput}
+                      >
+                        <option value="">Select season</option>
+                        {adminSeasons.map((season) => (
+                          <option key={season.id} value={season.id}>
+                            {season.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div style={bulkSectionHeader}>
+                    <div style={bulkSectionTitle}>Standing Rows</div>
+                    <button type="button" onClick={addStandingsRow} style={miniActionButton}>
+                      Add Team Row
+                    </button>
+                  </div>
+
+                  <div style={standingsRowsWrap}>
+                    {standingsForm.rows.map((row, index) => (
+                      <div key={`${row.id || 'new-standing'}-${index}`} style={standingRowCard}>
+                        <div style={standingRowHeader}>
+                          <div style={standingRowTitle}>Team Row {index + 1}</div>
+                          <button type="button" onClick={() => removeStandingsRow(index)} style={miniDangerButton}>
+                            Remove
+                          </button>
+                        </div>
+
+                        <div style={formGrid}>
+                          <label style={fieldWrap}>
+                            <span style={fieldLabel}>Team</span>
+                            <select
+                              value={row.team_id}
+                              onChange={(event) => updateStandingsRow(index, 'team_id', event.target.value)}
+                              style={fieldInput}
+                            >
+                              <option value="">Select team</option>
+                              {adminTeams.map((team) => (
+                                <option key={team.id} value={team.id}>
+                                  {team.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label style={fieldWrap}><span style={fieldLabel}>Rank</span><input value={row.rank} onChange={(event) => updateStandingsRow(index, 'rank', event.target.value)} style={fieldInput} /></label>
+                          <label style={fieldWrap}><span style={fieldLabel}>GP</span><input value={row.gp} onChange={(event) => updateStandingsRow(index, 'gp', event.target.value)} style={fieldInput} /></label>
+                          <label style={fieldWrap}><span style={fieldLabel}>Wins</span><input value={row.wins} onChange={(event) => updateStandingsRow(index, 'wins', event.target.value)} style={fieldInput} /></label>
+                          <label style={fieldWrap}><span style={fieldLabel}>Losses</span><input value={row.losses} onChange={(event) => updateStandingsRow(index, 'losses', event.target.value)} style={fieldInput} /></label>
+                          <label style={fieldWrap}><span style={fieldLabel}>OTL</span><input value={row.overtime_losses} onChange={(event) => updateStandingsRow(index, 'overtime_losses', event.target.value)} style={fieldInput} /></label>
+                          <label style={fieldWrap}><span style={fieldLabel}>Regulation Wins</span><input value={row.regulation_wins} onChange={(event) => updateStandingsRow(index, 'regulation_wins', event.target.value)} style={fieldInput} /></label>
+                          <label style={fieldWrap}><span style={fieldLabel}>Points</span><input value={row.points} onChange={(event) => updateStandingsRow(index, 'points', event.target.value)} style={fieldInput} /></label>
+                          <label style={fieldWrap}><span style={fieldLabel}>Goals For</span><input value={row.goals_for} onChange={(event) => updateStandingsRow(index, 'goals_for', event.target.value)} style={fieldInput} /></label>
+                          <label style={fieldWrap}><span style={fieldLabel}>Goals Against</span><input value={row.goals_against} onChange={(event) => updateStandingsRow(index, 'goals_against', event.target.value)} style={fieldInput} /></label>
+                          <label style={fieldWrap}><span style={fieldLabel}>Goal Difference</span><input value={row.goal_difference} onChange={(event) => updateStandingsRow(index, 'goal_difference', event.target.value)} style={fieldInput} /></label>
+                          <label style={fieldWrap}><span style={fieldLabel}>SOGF</span><input value={row.sogf} onChange={(event) => updateStandingsRow(index, 'sogf', event.target.value)} style={fieldInput} /></label>
+                          <label style={fieldWrap}><span style={fieldLabel}>SOGA</span><input value={row.soga} onChange={(event) => updateStandingsRow(index, 'soga', event.target.value)} style={fieldInput} /></label>
+                          <label style={fieldWrap}><span style={fieldLabel}>Shot Percentage</span><input value={row.shot_percentage} onChange={(event) => updateStandingsRow(index, 'shot_percentage', event.target.value)} style={fieldInput} /></label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               {!adminIsLoading && activeAdminPanel === 'team' ? (
                 <div style={modalBody}>
                   <div style={formGrid}>
@@ -1549,6 +1837,8 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                       ? savePlayerForm
                       : activeAdminPanel === 'stats'
                         ? saveStatsForm
+                        : activeAdminPanel === 'standings'
+                          ? saveStandingsForm
                         : activeAdminPanel === 'team'
                           ? saveTeamForm
                           : saveLeagueForm
@@ -1813,6 +2103,66 @@ const closeButton: React.CSSProperties = {
 
 const modalBody: React.CSSProperties = {
   padding: 20,
+}
+
+const bulkSectionHeader: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginTop: 22,
+  marginBottom: 14,
+}
+
+const bulkSectionTitle: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 800,
+  color: '#102f47',
+}
+
+const standingsRowsWrap: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 14,
+}
+
+const standingRowCard: React.CSSProperties = {
+  border: '1px solid #d5dfe8',
+  borderRadius: 8,
+  background: '#f8fbfe',
+  padding: 16,
+}
+
+const standingRowHeader: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginBottom: 12,
+}
+
+const standingRowTitle: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 800,
+  color: '#173650',
+}
+
+const miniActionButton: React.CSSProperties = {
+  border: 'none',
+  borderRadius: 6,
+  background: '#31a64a',
+  color: '#fff',
+  fontSize: 12,
+  fontWeight: 800,
+  padding: '9px 12px',
+}
+
+const miniDangerButton: React.CSSProperties = {
+  border: '1px solid #d9a2aa',
+  borderRadius: 6,
+  background: '#fff',
+  color: '#a73445',
+  fontSize: 12,
+  fontWeight: 800,
+  padding: '8px 12px',
 }
 
 const formGrid: React.CSSProperties = {
