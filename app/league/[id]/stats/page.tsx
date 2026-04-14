@@ -106,6 +106,14 @@ export default function LeagueStatsPage() {
   const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
+    const requestedTab = searchParams.get('tab')
+
+    if (requestedTab === 'season' || requestedTab === 'allTime' || requestedTab === 'allTimeSeason' || requestedTab === 'allTimeTeam') {
+      setActiveTab(requestedTab)
+    }
+  }, [searchParams])
+
+  useEffect(() => {
     if (!identifier) return
 
     async function fetchStatsPage() {

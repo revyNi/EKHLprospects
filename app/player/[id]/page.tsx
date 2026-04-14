@@ -334,6 +334,10 @@ function makeEditableAward(award?: AwardRecord | null): EditableAwardRecord {
   }
 }
 
+function makeClientId() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined
+}
+
 export default function PlayerPage() {
   const params = useParams()
   const playerId = params?.id as string
@@ -830,6 +834,7 @@ export default function PlayerPage() {
     const newAwards = editorAwards
       .filter((row) => !row.id)
       .map((row) => ({
+        id: makeClientId(),
         player_id: playerId,
         season: row.season.trim() || null,
         league: row.league.trim() || null,
@@ -844,7 +849,14 @@ export default function PlayerPage() {
       actions.push(supabase.from('stats').upsert(existingStatRows))
     }
     if (newStatRows.length) {
-      actions.push(supabase.from('stats').insert(newStatRows))
+      actions.push(
+        supabase.from('stats').insert(
+          newStatRows.map((row) => ({
+            ...row,
+            id: row.id || makeClientId(),
+          }))
+        )
+      )
     }
     const finalDeletedStatIds = Array.from(new Set([...deletedStatIds, ...statIdsToDeleteFromEmptyRows]))
     if (finalDeletedStatIds.length) {
@@ -1139,9 +1151,10 @@ export default function PlayerPage() {
             </tr>
           </thead>
           <tbody>
-            {grouped.map((group) => {
+            {grouped.map((group, index) => {
               const sogPerGame = avg(group.shots, group.gp)
               const calcPct = formatSavePct(group.saves, group.shotsAgainst, group.gk_percentage)
+              const showSeasonLabel = index === 0 || grouped[index - 1]?.season !== group.season
               const rowLeague =
                 getLeagueForTeamLeague(group.teamLeague) ||
                 (normalizeLookupValue(group.teamLeague) === normalizeLookupValue(playerLeagueLabel)
@@ -1150,7 +1163,7 @@ export default function PlayerPage() {
 
               return (
                 <tr key={`${group.season}-${group.team}`} style={tableRow}>
-                  <td style={tdLeft}>{group.season}</td>
+                  <td style={tdLeft}>{showSeasonLabel ? group.season : ''}</td>
                   <td style={tdLeft}>
                     <div style={teamCell}>
                       {group.logo ? <img src={group.logo} alt={group.team} style={teamLogo} /> : null}

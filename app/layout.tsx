@@ -628,6 +628,11 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
   const sidebarLeagueOptions = resolvedLeagueOptions.length ? resolvedLeagueOptions : fallbackLeagueOptions
   const activeLeaderLeagueId = selectedLeaderLeague || sidebarLeagueOptions[0]?.id || ''
   const activeLeaderLeague = sidebarLeagueOptions.find((league) => league.id === activeLeaderLeagueId) || null
+  const leaderShowMoreHref = activeLeaderLeague
+    ? `/league/${encodeURIComponent(activeLeaderLeague.id)}/stats?tab=allTime&context=${encodeURIComponent(
+        `${activeLeaderLeague.abbreviation || activeLeaderLeague.name} Top Scorers`
+      )}`
+    : '#'
   const leaderPlayersById = new Map(leaderPlayers.map((player) => [String(player.id), player]))
   const leaderRows = Object.values(
     leaderStats.reduce<Record<string, SidebarLeaderRow>>((acc, stat) => {
@@ -822,6 +827,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     }
 
     const statPayload = {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined,
       ...matchPayload,
       gp: toNullableNumber(statsForm.gp),
       goals: toNullableNumber(statsForm.goals),
@@ -868,7 +874,10 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     }
 
     const { error: saveError } = existingRow?.id
-      ? await supabase.from('stats').update(statPayload).eq('id', existingRow.id)
+      ? await supabase.from('stats').update({
+          ...statPayload,
+          id: existingRow.id,
+        }).eq('id', existingRow.id)
       : await supabase.from('stats').insert(statPayload)
 
     if (saveError) {
@@ -1409,9 +1418,9 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                     </tbody>
                   </table>
 
-                  <button type="button" className="global-leaders-more">
+                  <Link href={leaderShowMoreHref} className="global-leaders-more">
                     Show More
-                  </button>
+                  </Link>
                 </div>
               </div>
             </aside>
