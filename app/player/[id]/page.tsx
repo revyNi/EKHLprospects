@@ -94,6 +94,7 @@ type EditableStatSide = {
 }
 
 type EditableStatRecord = {
+  team_id?: string | null
   season_id?: string | null
   regular: EditableStatSide
   playoffs: EditableStatSide
@@ -283,8 +284,9 @@ function mergeEditableStats(stats: FullStat[]) {
   const rows = new Map<string, EditableStatRecord>()
 
   stats.forEach((stat) => {
-    const key = stat.season_id || `no-season-${stat.id}`
+    const key = `${stat.season_id || 'no-season'}-${stat.team_id || `no-team-${stat.id}`}`
     const existing = rows.get(key) || {
+      team_id: stat.team_id || '',
       season_id: stat.season_id || '',
       regular: makeEditableStatSide(),
       playoffs: makeEditableStatSide(),
@@ -349,6 +351,7 @@ export default function PlayerPage() {
   const [grouped, setGrouped] = useState<GroupedStat[]>([])
   const [awards, setAwards] = useState<AwardRecord[]>([])
   const [seasonOptions, setSeasonOptions] = useState<SeasonRecord[]>([])
+  const [teamOptions, setTeamOptions] = useState<TeamRecord[]>([])
   const [statsView, setStatsView] = useState<'default' | 'perGame'>('default')
   const [tab, setTab] = useState<'regular' | 'playoffs'>('regular')
   const [awardView, setAwardView] = useState<'season' | 'league'>('season')
@@ -435,6 +438,7 @@ export default function PlayerPage() {
         setGrouped([])
         setAwards([])
         setSeasonOptions([])
+        setTeamOptions([])
         return
       }
 
@@ -448,6 +452,7 @@ export default function PlayerPage() {
       setPlayer(playerRecord)
       setLeagues((leaguesData as LeagueRecord[]) || [])
       setSeasonOptions((seasons as SeasonRecord[]) || [])
+      setTeamOptions((teams as TeamRecord[]) || [])
 
       const fullStats: FullStat[] = ((statsRaw as StatRecord[]) || []).map((stat) => ({
         ...stat,
@@ -676,6 +681,7 @@ export default function PlayerPage() {
     setEditorStats((current) => [
       ...current,
       {
+        team_id: primaryTeam?.id || '',
         season_id: '',
         regular: makeEditableStatSide(),
         playoffs: makeEditableStatSide(),
@@ -683,7 +689,7 @@ export default function PlayerPage() {
     ])
   }
 
-  function updateStatRow(index: number, field: 'season_id', value: string) {
+  function updateStatRow(index: number, field: 'season_id' | 'team_id', value: string) {
     setEditorStats((current) =>
       current.map((row, rowIndex) =>
         rowIndex === index
@@ -776,7 +782,7 @@ export default function PlayerPage() {
       const buildPayload = (side: EditableStatSide, gameType: 'regular' | 'playoffs') => ({
         id: side.id,
         player_id: playerId,
-        team_id: primaryTeam?.id || null,
+        team_id: row.team_id || null,
         season_id: row.season_id || null,
         game_type: gameType,
         gp: side.gp.trim() ? Number(side.gp) : null,
@@ -1522,6 +1528,21 @@ export default function PlayerPage() {
                       </div>
 
                       <div style={editorSeasonHeaderRow}>
+                        <label style={editorField}>
+                          <span style={editorLabel}>Team</span>
+                          <select
+                            value={row.team_id || ''}
+                            onChange={(event) => updateStatRow(index, 'team_id', event.target.value)}
+                            style={editorInput}
+                          >
+                            <option value="">No team</option>
+                            {teamOptions.map((teamOption) => (
+                              <option key={teamOption.id} value={teamOption.id}>
+                                {teamOption.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                         <label style={editorField}>
                           <span style={editorLabel}>Season</span>
                           <select
