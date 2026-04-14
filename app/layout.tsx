@@ -862,17 +862,6 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
       return
     }
 
-    const { error: playerUpdateError } = await supabase
-      .from('players')
-      .update({ team_id: statsForm.team_id })
-      .eq('id', statsForm.player_id)
-
-    if (playerUpdateError) {
-      setAdminSaveMessage(playerUpdateError.message)
-      setAdminIsSaving(false)
-      return
-    }
-
     const { error: saveError } = existingRow?.id
       ? await supabase.from('stats').update({
           ...statPayload,

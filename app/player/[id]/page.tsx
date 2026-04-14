@@ -217,6 +217,28 @@ function normalizeLookupValue(value?: string | null) {
   return (value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
+function getSeasonSortValue(seasonLabel?: string | null) {
+  const value = (seasonLabel || '').trim()
+  if (!value) return Number.MAX_SAFE_INTEGER
+
+  const seasonCountMatch = value.match(/^S(\d+)$/i)
+  if (seasonCountMatch) {
+    return Number(seasonCountMatch[1])
+  }
+
+  const yearMatch = value.match(/(\d{4})/)
+  if (yearMatch) {
+    return Number(yearMatch[1])
+  }
+
+  const numberMatch = value.match(/(\d+)/)
+  if (numberMatch) {
+    return Number(numberMatch[1])
+  }
+
+  return Number.MAX_SAFE_INTEGER
+}
+
 function getPrimaryTeam(teamValue?: TeamRecord | TeamRecord[] | null) {
   if (Array.isArray(teamValue)) {
     return teamValue[0] || null
@@ -545,8 +567,14 @@ export default function PlayerPage() {
           groupedMap[key].gk_percentage = stat.gk_percentage
         }
       })
-
-      setGrouped(Object.values(groupedMap))
+      setGrouped(
+        Object.values(groupedMap).sort(
+          (a, b) =>
+            getSeasonSortValue(a.season) - getSeasonSortValue(b.season) ||
+            a.season.localeCompare(b.season) ||
+            a.team.localeCompare(b.team)
+        )
+      )
       setAwards((awardsRaw as AwardRecord[]) || [])
     }
 
@@ -636,7 +664,7 @@ export default function PlayerPage() {
     })
 
     return totals
-  }, [])
+  }, []).sort((a, b) => a.seasons - b.seasons || a.league.localeCompare(b.league))
   const groupedAwards = awards.reduce<Record<string, string[]>>((acc, awardRow) => {
     const key =
       awardView === 'season'

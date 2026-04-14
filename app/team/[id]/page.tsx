@@ -207,6 +207,19 @@ function normalizeLeagueLookup(value?: string | null) {
   return (value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
+function mergePlayersById(...groups: PlayerRecord[][]) {
+  const merged = new Map<string, PlayerRecord>()
+
+  groups.flat().forEach((player) => {
+    if (!player?.id) return
+
+    const existing = merged.get(player.id)
+    merged.set(player.id, existing ? { ...player, ...existing } : player)
+  })
+
+  return Array.from(merged.values())
+}
+
 export default function TeamPage() {
   const params = useParams()
   const id = params.id as string
@@ -278,13 +291,16 @@ export default function TeamPage() {
         new Set(statsRows.map((row) => row.player_id).filter(Boolean))
       ) as string[]
 
+      let statsLinkedPlayers: PlayerRecord[] = []
+
       if (franchisePlayerIds.length) {
         const { data: statPlayersData } = await supabase
           .from('players')
           .select('id, name, team_id, number, position, nationality')
           .in('id', franchisePlayerIds)
 
-        setFranchisePlayers((statPlayersData as PlayerRecord[]) || [])
+        statsLinkedPlayers = (statPlayersData as PlayerRecord[]) || []
+        setFranchisePlayers(statsLinkedPlayers)
       } else {
         setFranchisePlayers([])
       }
@@ -353,11 +369,15 @@ export default function TeamPage() {
           return
         }
 
-        const players = ((fallbackPlayers.data as PlayerRecord[]) || []).filter(
+        const linkedPlayers = ((fallbackPlayers.data as PlayerRecord[]) || []).filter(
           (player) =>
             String(player.team_id) === String(id) ||
             String(getPlayerLinkedTeam(player)?.id) === String(id) ||
             getPlayerLinkedTeam(player)?.name === teamData.name
+        )
+        const players = mergePlayersById(
+          linkedPlayers,
+          statsLinkedPlayers.filter((player) => franchisePlayerIds.includes(String(player.id)))
         )
 
         setRawStats(statsRows)
@@ -400,11 +420,15 @@ export default function TeamPage() {
         return
       }
 
-      const players = joinedPlayers.filter(
+      const linkedPlayers = joinedPlayers.filter(
         (player) =>
           String(player.team_id) === String(id) ||
           String(getPlayerLinkedTeam(player)?.id) === String(id) ||
           getPlayerLinkedTeam(player)?.name === teamData.name
+      )
+      const players = mergePlayersById(
+        linkedPlayers,
+        statsLinkedPlayers.filter((player) => franchisePlayerIds.includes(String(player.id)))
       )
       setRawStats(statsRows)
       setTeamPlayers(players)
