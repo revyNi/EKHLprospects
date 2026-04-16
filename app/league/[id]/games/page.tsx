@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../../lib/supabaseClient'
 
@@ -334,7 +334,13 @@ export default function LeagueGamesPage() {
             </thead>
             <tbody>
               {groupedMatches.map(([dateLabel, dateMatches]) => (
-                dateMatches.map((match, index) => {
+                <Fragment key={dateLabel}>
+                  <tr key={`${dateLabel}-group`} style={dateGroupRow}>
+                    <td colSpan={5} style={dateGroupCell}>
+                      <div style={dateGroup}>{dateLabel}</div>
+                    </td>
+                  </tr>
+                  {dateMatches.map((match, index) => {
                   const homeTeam = match.home_team_id ? teamsById.get(String(match.home_team_id)) : null
                   const visitingTeam = match.visiting_team_id ? teamsById.get(String(match.visiting_team_id)) : null
                   const leagueLabel = league?.name || 'League'
@@ -342,7 +348,6 @@ export default function LeagueGamesPage() {
                   return (
                     <tr key={match.id} style={index % 2 === 0 ? tableRowAlt : tableRow}>
                       <td style={dateCell}>
-                        {index === 0 ? <div style={dateGroup}>{dateLabel}</div> : null}
                         <div style={timeLabel}>{formatTimeLabel(match.match_date)}</div>
                       </td>
                       <td style={teamCell}>
@@ -382,7 +387,8 @@ export default function LeagueGamesPage() {
                       </td>
                     </tr>
                   )
-                })
+                })}
+                </Fragment>
               ))}
 
               {!groupedMatches.length ? (
@@ -554,6 +560,14 @@ const tableRowAlt = {
   background: '#eef2f6',
 }
 
+const dateGroupRow = {
+  background: '#a9c7d7',
+}
+
+const dateGroupCell = {
+  padding: 0,
+}
+
 const dateCell = {
   padding: '0',
   color: '#173650',
@@ -561,11 +575,11 @@ const dateCell = {
 }
 
 const dateGroup = {
-  background: '#9fc0d3',
+  background: '#a9c7d7',
   color: '#fff',
   fontSize: 13,
   fontWeight: 800,
-  padding: '10px 12px',
+  padding: '11px 14px',
 }
 
 const timeLabel = {
