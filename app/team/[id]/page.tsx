@@ -345,7 +345,7 @@ export default function TeamPage() {
 
         const { data: careerTeamsData } = await supabase
           .from('teams')
-          .select('id, name, logo_url, country, country_code')
+          .select('id, name, logo_url, country, country_code, league')
           .in('id', teamIds)
 
         setExperienceTeams((careerTeamsData as TeamRecord[]) || [])
@@ -817,7 +817,6 @@ export default function TeamPage() {
             <RosterFacts
               seasonName={currentSeasonName}
               teamName={team.name}
-              teamLeagueName={team.league || ''}
               nationalities={nationalityRows}
               experienceRows={experienceRows}
             />
@@ -1092,13 +1091,11 @@ function TeamFacts({ team }: { team: TeamRecord }) {
 function RosterFacts({
   seasonName,
   teamName,
-  teamLeagueName,
   nationalities,
   experienceRows,
 }: {
   seasonName: string
   teamName: string
-  teamLeagueName: string
   nationalities: { code: string; count: number }[]
   experienceRows: {
     team: string
@@ -1109,7 +1106,6 @@ function RosterFacts({
   }[]
 }) {
   const totalExperienceGp = experienceRows.reduce((sum, item) => sum + item.gp, 0)
-  const leadExperienceLabel = teamLeagueName || teamName
   const leagueExperienceRows = Object.values(
     experienceRows.reduce<
       Record<
@@ -1172,7 +1168,7 @@ function RosterFacts({
             {leagueExperienceRows.length ? (
               <>
                 <div style={factInlineItem}>
-                  <span>{leadExperienceLabel}: {totalExperienceGp} GP</span>
+                  <span>{teamName}: {totalExperienceGp} GP</span>
                 </div>
                 {leagueExperienceRows.map((item) => {
                   const flagUrl = getFlagUrl(item.country, item.country_code)

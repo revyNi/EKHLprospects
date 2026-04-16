@@ -86,6 +86,9 @@ type MatchRecord = {
   home_score?: number | null
   visiting_score?: number | null
   score_note?: string | null
+  status?: string | null
+  venue?: string | null
+  attendance?: number | null
 }
 
 type LeagueChampionRecord = {
@@ -201,6 +204,31 @@ function formatGaa(goalsAgainst: number, gp: number) {
   return (goalsAgainst / gp).toFixed(2)
 }
 
+function normalizeMatchStatus(status?: string | null, match?: MatchRecord) {
+  const normalized = (status || '').trim().toLowerCase()
+  if (normalized) return normalized
+
+  if (
+    match?.home_score !== null &&
+    match?.home_score !== undefined &&
+    match?.visiting_score !== null &&
+    match?.visiting_score !== undefined
+  ) {
+    return 'final'
+  }
+
+  return 'scheduled'
+}
+
+function formatMatchStatusLabel(status?: string | null, match?: MatchRecord) {
+  const normalized = normalizeMatchStatus(status, match)
+  if (normalized === 'live') return 'LIVE'
+  if (normalized === 'postponed') return 'PPD'
+  if (normalized === 'cancelled') return 'CANCELLED'
+  if (normalized === 'final') return 'FINAL'
+  return 'SCHEDULED'
+}
+
 export default function LeagueDetailPage() {
   const params = useParams()
   const identifier = decodeURIComponent(params.id as string)
@@ -295,7 +323,7 @@ export default function LeagueDetailPage() {
           .order('rank', { ascending: true }),
         supabase
           .from('league_matches')
-          .select('id, league_id, season_id, match_date, home_team_id, visiting_team_id, home_score, visiting_score, score_note')
+          .select('id, league_id, season_id, match_date, home_team_id, visiting_team_id, home_score, visiting_score, score_note, status, venue, attendance')
           .eq('league_id', leagueRecord.id)
           .order('match_date', { ascending: false }),
         supabase
@@ -396,6 +424,7 @@ export default function LeagueDetailPage() {
   const leagueShortName = league.abbreviation || league.short_name || league.name
   const leagueDisplayName = league.display_name || league.full_name || league.name
   const statsPageHref = `/league/${encodeURIComponent(league.id)}/stats`
+  const gamesPageHref = `/league/${encodeURIComponent(league.id)}/games`
   const teamsById = new Map(teams.map((team) => [team.id, team]))
   const playersById = new Map(leaguePlayers.map((player) => [player.id, player]))
   const seasonsById = new Map(allSeasons.map((season) => [String(season.id), season.name]))
@@ -723,7 +752,7 @@ export default function LeagueDetailPage() {
           title={`${leagueShortName.toUpperCase()} GAMES`}
           matches={filteredMatches}
           teamsById={teamsById}
-          showMoreHref={`${statsPageHref}?context=${encodeURIComponent(`${leagueShortName} Games`)}`}
+          showMoreHref={gamesPageHref}
         />
 
         <LeagueNationalityHistoryCard nationalities={nationalityHistory} />
@@ -867,7 +896,7 @@ function LeagueMatchesCard({
               match.visiting_score !== null &&
               match.visiting_score !== undefined
                 ? `${match.home_score}-${match.visiting_score}${match.score_note ? ` (${match.score_note})` : ''}`
-                : '-'
+                : formatMatchStatusLabel(match.status, match)
 
             return (
               <tr key={match.id} style={index % 2 === 0 ? standingRowAlt : standingRow}>

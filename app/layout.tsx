@@ -8,7 +8,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
 import { loadAdminStatus } from '../lib/adminClient'
 
-type AdminPanelType = 'player' | 'stats' | 'league' | 'team' | 'standings' | null
+type AdminPanelType = 'player' | 'stats' | 'league' | 'team' | 'standings' | 'match' | null
 
 type AdminPlayerOption = {
   id: string
@@ -164,6 +164,34 @@ type AdminStandingsForm = {
   rows: AdminStandingRowForm[]
 }
 
+type AdminMatchOption = {
+  id: string
+  match_date?: string | null
+  home_team_id?: string | null
+  visiting_team_id?: string | null
+  home_score?: number | null
+  visiting_score?: number | null
+  score_note?: string | null
+  status?: string | null
+  venue?: string | null
+  attendance?: number | null
+}
+
+type AdminMatchForm = {
+  selected_match_id: string
+  league_id: string
+  season_id: string
+  match_date: string
+  home_team_id: string
+  visiting_team_id: string
+  home_score: string
+  visiting_score: string
+  score_note: string
+  status: 'scheduled' | 'live' | 'final' | 'postponed' | 'cancelled'
+  venue: string
+  attendance: string
+}
+
 const pages = [
   { name: 'Home', href: '/' },
   { name: 'Teams', href: '/team' },
@@ -252,6 +280,21 @@ const emptyStandingsForm = (): AdminStandingsForm => ({
   rows: [emptyStandingRow()],
 })
 
+const emptyMatchForm = (): AdminMatchForm => ({
+  selected_match_id: '',
+  league_id: '',
+  season_id: '',
+  match_date: '',
+  home_team_id: '',
+  visiting_team_id: '',
+  home_score: '',
+  visiting_score: '',
+  score_note: '',
+  status: 'scheduled',
+  venue: '',
+  attendance: '',
+})
+
 function toNullableNumber(value: string) {
   return value.trim() ? Number(value) : null
 }
@@ -319,6 +362,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [leagueForm, setLeagueForm] = useState<AdminLeagueForm>(emptyLeagueForm)
   const [teamForm, setTeamForm] = useState<AdminTeamForm>(emptyTeamForm)
   const [standingsForm, setStandingsForm] = useState<AdminStandingsForm>(emptyStandingsForm)
+  const [matchForm, setMatchForm] = useState<AdminMatchForm>(emptyMatchForm)
+  const [adminMatches, setAdminMatches] = useState<AdminMatchOption[]>([])
   const [searchValue, setSearchValue] = useState('')
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchPlayers, setSearchPlayers] = useState<SearchPlayerOption[]>([])
@@ -455,6 +500,37 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }, [activeAdminPanel, standingsForm.league_id, standingsForm.season_id])
 
   useEffect(() => {
+    if (activeAdminPanel !== 'match') return
+    if (!matchForm.league_id || !matchForm.season_id) {
+      setAdminMatches([])
+      return
+    }
+
+    async function fetchExistingMatches() {
+      setAdminIsLoading(true)
+
+      const { data, error } = await supabase
+        .from('league_matches')
+        .select('id, match_date, home_team_id, visiting_team_id, home_score, visiting_score, score_note, status, venue, attendance')
+        .eq('league_id', matchForm.league_id)
+        .eq('season_id', matchForm.season_id)
+        .order('match_date', { ascending: false })
+
+      if (error) {
+        setAdminSaveMessage(error.message)
+        setAdminMatches([])
+        setAdminIsLoading(false)
+        return
+      }
+
+      setAdminMatches((data as AdminMatchOption[]) || [])
+      setAdminIsLoading(false)
+    }
+
+    void fetchExistingMatches()
+  }, [activeAdminPanel, matchForm.league_id, matchForm.season_id])
+
+  useEffect(() => {
     async function fetchSearchOptions() {
       const [
         { data: playersData },
@@ -521,6 +597,10 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     if (panel === 'league') setLeagueForm(emptyLeagueForm())
     if (panel === 'team') setTeamForm(emptyTeamForm())
     if (panel === 'standings') setStandingsForm(emptyStandingsForm())
+    if (panel === 'match') {
+      setMatchForm(emptyMatchForm())
+      setAdminMatches([])
+    }
     setActiveAdminPanel(panel)
   }
 
@@ -1018,6 +1098,69 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     setAdminIsSaving(false)
   }
 
+  async function saveMatchForm() {
+    if (!matchForm.league_id || !matchForm.season_id) {
+      setAdminSaveMessage('Select a league and season first.')
+      return
+    }
+
+    if (!matchForm.home_team_id || !matchForm.visiting_team_id) {
+      setAdminSaveMessage('Select both home and visiting teams.')
+      return
+    }
+
+    if (matchForm.home_team_id === matchForm.visiting_team_id) {
+      setAdminSaveMessage('Home and visiting teams must be different.')
+      return
+    }
+
+    setAdminIsSaving(true)
+    setAdminSaveMessage('')
+
+    const payload = {
+      id:
+        matchForm.selected_match_id ||
+        (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined),
+      league_id: matchForm.league_id,
+      season_id: matchForm.season_id,
+      match_date: matchForm.match_date.trim() || null,
+      home_team_id: matchForm.home_team_id,
+      visiting_team_id: matchForm.visiting_team_id,
+      home_score: toNullableNumber(matchForm.home_score),
+      visiting_score: toNullableNumber(matchForm.visiting_score),
+      score_note: matchForm.score_note.trim() || null,
+      status: matchForm.status,
+      venue: matchForm.venue.trim() || null,
+      attendance: toNullableNumber(matchForm.attendance),
+    }
+
+    const { error } = matchForm.selected_match_id
+      ? await supabase.from('league_matches').update(payload).eq('id', matchForm.selected_match_id)
+      : await supabase.from('league_matches').insert(payload)
+
+    if (error) {
+      setAdminSaveMessage(error.message)
+      setAdminIsSaving(false)
+      return
+    }
+
+    const { data: refreshedMatches } = await supabase
+      .from('league_matches')
+      .select('id, match_date, home_team_id, visiting_team_id, home_score, visiting_score, score_note, status, venue, attendance')
+      .eq('league_id', matchForm.league_id)
+      .eq('season_id', matchForm.season_id)
+      .order('match_date', { ascending: false })
+
+    setAdminMatches((refreshedMatches as AdminMatchOption[]) || [])
+    setAdminSaveMessage(matchForm.selected_match_id ? 'Match updated.' : 'Match added.')
+    setMatchForm((current) => ({
+      ...emptyMatchForm(),
+      league_id: current.league_id,
+      season_id: current.season_id,
+    }))
+    setAdminIsSaving(false)
+  }
+
   return (
     <html lang="en">
       <body style={body}>
@@ -1106,6 +1249,9 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                     </button>
                     <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('standings')}>
                       Add/Update Standings
+                    </button>
+                    <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('match')}>
+                      Add/Update Match
                     </button>
                   </div>
                 ) : null}
@@ -1429,6 +1575,8 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                       ? 'Add Roster/Stats'
                       : activeAdminPanel === 'standings'
                         ? 'Add/Update Standings'
+                      : activeAdminPanel === 'match'
+                        ? 'Add/Update Match'
                       : activeAdminPanel === 'team'
                         ? 'Add Team'
                       : 'Add League'}
@@ -1732,6 +1880,265 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                 </div>
               ) : null}
 
+              {!adminIsLoading && activeAdminPanel === 'match' ? (
+                <div style={modalBody}>
+                  <div style={formGrid}>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>League</span>
+                      <select
+                        value={matchForm.league_id}
+                        onChange={(event) =>
+                          setMatchForm((current) => ({
+                            ...current,
+                            selected_match_id: '',
+                            league_id: event.target.value,
+                            home_team_id: '',
+                            visiting_team_id: '',
+                            match_date: '',
+                            home_score: '',
+                            visiting_score: '',
+                            score_note: '',
+                            venue: '',
+                            attendance: '',
+                            status: 'scheduled',
+                          }))
+                        }
+                        style={fieldInput}
+                      >
+                        <option value="">Select league</option>
+                        {adminLeagues.map((league) => (
+                          <option key={league.id} value={league.id}>
+                            {league.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Season</span>
+                      <select
+                        value={matchForm.season_id}
+                        onChange={(event) =>
+                          setMatchForm((current) => ({
+                            ...current,
+                            selected_match_id: '',
+                            season_id: event.target.value,
+                            home_team_id: '',
+                            visiting_team_id: '',
+                            match_date: '',
+                            home_score: '',
+                            visiting_score: '',
+                            score_note: '',
+                            venue: '',
+                            attendance: '',
+                            status: 'scheduled',
+                          }))
+                        }
+                        style={fieldInput}
+                      >
+                        <option value="">Select season</option>
+                        {adminSeasons.map((season) => (
+                          <option key={season.id} value={season.id}>
+                            {season.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label style={{ ...fieldWrap, gridColumn: '1 / -1' }}>
+                      <span style={fieldLabel}>Existing Match</span>
+                      <select
+                        value={matchForm.selected_match_id}
+                        onChange={(event) => {
+                          const selectedMatchId = event.target.value
+                          const selectedMatch = adminMatches.find((match) => match.id === selectedMatchId)
+
+                          if (!selectedMatch) {
+                            setMatchForm((current) => ({
+                              ...current,
+                              selected_match_id: '',
+                              home_team_id: '',
+                              visiting_team_id: '',
+                              match_date: '',
+                              home_score: '',
+                              visiting_score: '',
+                              score_note: '',
+                              venue: '',
+                              attendance: '',
+                              status: 'scheduled',
+                            }))
+                            return
+                          }
+
+                          setMatchForm((current) => ({
+                            ...current,
+                            selected_match_id: selectedMatch.id,
+                            match_date: selectedMatch.match_date || '',
+                            home_team_id: String(selectedMatch.home_team_id || ''),
+                            visiting_team_id: String(selectedMatch.visiting_team_id || ''),
+                            home_score:
+                              selectedMatch.home_score === null || selectedMatch.home_score === undefined
+                                ? ''
+                                : String(selectedMatch.home_score),
+                            visiting_score:
+                              selectedMatch.visiting_score === null || selectedMatch.visiting_score === undefined
+                                ? ''
+                                : String(selectedMatch.visiting_score),
+                            score_note: selectedMatch.score_note || '',
+                            status:
+                              (selectedMatch.status as AdminMatchForm['status']) || 'scheduled',
+                            venue: selectedMatch.venue || '',
+                            attendance:
+                              selectedMatch.attendance === null || selectedMatch.attendance === undefined
+                                ? ''
+                                : String(selectedMatch.attendance),
+                          }))
+                        }}
+                        style={fieldInput}
+                      >
+                        <option value="">Create new match</option>
+                        {adminMatches.map((match) => {
+                          const homeTeamName =
+                            adminTeams.find((team) => team.id === String(match.home_team_id))?.name || 'Home'
+                          const visitingTeamName =
+                            adminTeams.find((team) => team.id === String(match.visiting_team_id))?.name || 'Visiting'
+
+                          return (
+                            <option key={match.id} value={match.id}>
+                              {match.match_date || 'No date'} | {homeTeamName} vs {visitingTeamName}
+                            </option>
+                          )
+                        })}
+                      </select>
+                    </label>
+
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Match Date/Time</span>
+                      <input
+                        value={matchForm.match_date}
+                        onChange={(event) =>
+                          setMatchForm((current) => ({ ...current, match_date: event.target.value }))
+                        }
+                        placeholder="2026-04-16T18:00:00"
+                        style={fieldInput}
+                      />
+                    </label>
+
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Status</span>
+                      <select
+                        value={matchForm.status}
+                        onChange={(event) =>
+                          setMatchForm((current) => ({
+                            ...current,
+                            status: event.target.value as AdminMatchForm['status'],
+                          }))
+                        }
+                        style={fieldInput}
+                      >
+                        <option value="scheduled">Scheduled</option>
+                        <option value="live">Live</option>
+                        <option value="final">Final</option>
+                        <option value="postponed">Postponed</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    </label>
+
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Home Team</span>
+                      <select
+                        value={matchForm.home_team_id}
+                        onChange={(event) =>
+                          setMatchForm((current) => ({ ...current, home_team_id: event.target.value }))
+                        }
+                        style={fieldInput}
+                      >
+                        <option value="">Select team</option>
+                        {adminTeams.map((team) => (
+                          <option key={team.id} value={team.id}>
+                            {team.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Visiting Team</span>
+                      <select
+                        value={matchForm.visiting_team_id}
+                        onChange={(event) =>
+                          setMatchForm((current) => ({ ...current, visiting_team_id: event.target.value }))
+                        }
+                        style={fieldInput}
+                      >
+                        <option value="">Select team</option>
+                        {adminTeams.map((team) => (
+                          <option key={team.id} value={team.id}>
+                            {team.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Home Score</span>
+                      <input
+                        value={matchForm.home_score}
+                        onChange={(event) =>
+                          setMatchForm((current) => ({ ...current, home_score: event.target.value }))
+                        }
+                        style={fieldInput}
+                      />
+                    </label>
+
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Visiting Score</span>
+                      <input
+                        value={matchForm.visiting_score}
+                        onChange={(event) =>
+                          setMatchForm((current) => ({ ...current, visiting_score: event.target.value }))
+                        }
+                        style={fieldInput}
+                      />
+                    </label>
+
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Score Note</span>
+                      <input
+                        value={matchForm.score_note}
+                        onChange={(event) =>
+                          setMatchForm((current) => ({ ...current, score_note: event.target.value }))
+                        }
+                        placeholder="OT 3:2 / SO / etc."
+                        style={fieldInput}
+                      />
+                    </label>
+
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Attendance</span>
+                      <input
+                        value={matchForm.attendance}
+                        onChange={(event) =>
+                          setMatchForm((current) => ({ ...current, attendance: event.target.value }))
+                        }
+                        style={fieldInput}
+                      />
+                    </label>
+
+                    <label style={{ ...fieldWrap, gridColumn: '1 / -1' }}>
+                      <span style={fieldLabel}>Venue</span>
+                      <input
+                        value={matchForm.venue}
+                        onChange={(event) =>
+                          setMatchForm((current) => ({ ...current, venue: event.target.value }))
+                        }
+                        style={fieldInput}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : null}
+
               {!adminIsLoading && activeAdminPanel === 'team' ? (
                 <div style={modalBody}>
                   <div style={formGrid}>
@@ -1837,6 +2244,8 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                         ? saveStatsForm
                         : activeAdminPanel === 'standings'
                           ? saveStandingsForm
+                        : activeAdminPanel === 'match'
+                          ? saveMatchForm
                         : activeAdminPanel === 'team'
                           ? saveTeamForm
                           : saveLeagueForm

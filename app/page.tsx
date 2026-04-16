@@ -4,6 +4,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { loadAdminStatus } from '../lib/adminClient'
 
 type TeamRecord = {
   id: string
@@ -55,6 +56,7 @@ function formatDateLabel(value?: string | null) {
 }
 
 export default function HomePage() {
+  const [isAdmin, setIsAdmin] = useState(false)
   const [players, setPlayers] = useState<PlayerRecord[]>([])
   const [teams, setTeams] = useState<TeamRecord[]>([])
   const [transfers, setTransfers] = useState<TransferRecord[]>([])
@@ -77,6 +79,29 @@ export default function HomePage() {
     source: '',
     source_url: '',
   })
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function fetchAdminStatus() {
+      const status = await loadAdminStatus()
+      if (!isMounted) return
+      setIsAdmin(status.isAdmin)
+    }
+
+    void fetchAdminStatus()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      void fetchAdminStatus()
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
 
   useEffect(() => {
     async function fetchTransfersPage() {
@@ -189,6 +214,8 @@ export default function HomePage() {
   }
 
   function openSubmitModal() {
+    if (!isAdmin) return
+
     setSubmitMessage('')
     setTransferForm({
       date: '',
@@ -209,6 +236,8 @@ export default function HomePage() {
   }
 
   async function submitTransfer() {
+    if (!isAdmin) return
+
     setIsSubmitting(true)
     setSubmitMessage('')
 
@@ -306,9 +335,11 @@ export default function HomePage() {
             RUMOURS
           </button>
           <div style={tabsSpacer} />
-          <button type="button" style={submitButton} onClick={openSubmitModal}>
-            SUBMIT TRANSFER/RUMOUR
-          </button>
+          {isAdmin ? (
+            <button type="button" style={submitButton} onClick={openSubmitModal}>
+              SUBMIT TRANSFER/RUMOUR
+            </button>
+          ) : null}
         </div>
 
         <div style={tableCard}>
@@ -383,7 +414,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {isSubmitOpen ? (
+      {isAdmin && isSubmitOpen ? (
         <div style={modalOverlay} onClick={closeSubmitModal}>
           <div style={modalCard} onClick={(event) => event.stopPropagation()}>
             <div style={modalHeader}>
