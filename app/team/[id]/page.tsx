@@ -107,12 +107,25 @@ type FranchiseStat = {
   hits: number
 }
 
+type FranchiseGoalieStat = {
+  id: string
+  name: string
+  position: string | null | undefined
+  nationality: string | null | undefined
+  gp: number
+  saves: number
+  shutouts: number
+  shotsAgainst: number
+  gk_percentage: number
+}
+
 type FranchiseSeasonStat = FranchiseStat & {
   seasonName: string
   leagueName: string
 }
 
 type FranchiseRankKey = 'gp' | 'goals' | 'assists' | 'points' | 'hits' | 'ppg'
+type FranchiseGoalieRankKey = 'saves' | 'shutouts' | 'savePct'
 
 const recentForm = [
   { result: 'W 1-0', date: 'Mar 27' },
@@ -205,6 +218,14 @@ function getPlayerLinkedTeam(player: PlayerRecord): TeamRecord | null {
 
 function normalizeLeagueLookup(value?: string | null) {
   return (value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+function formatSavePct(saves: number, shotsAgainst: number, savedPct?: number | null) {
+  if (savedPct && Number.isFinite(Number(savedPct))) {
+    return Number(savedPct).toFixed(3)
+  }
+  if (!shotsAgainst) return '0'
+  return (saves / shotsAgainst).toFixed(3)
 }
 
 function mergePlayersById(...groups: PlayerRecord[][]) {
@@ -653,7 +674,7 @@ export default function TeamPage() {
       if (!matchesFranchiseGameType(row) || !row.player_id) return acc
 
       const player = franchisePlayerMap.get(String(row.player_id))
-      if (!player) return acc
+      if (!player || getPositionGroup(player.position) === 'G') return acc
 
       if (!acc[player.id]) {
         acc[player.id] = {
@@ -687,7 +708,7 @@ export default function TeamPage() {
       const player = franchisePlayerMap.get(String(row.player_id))
       const season = seasonOptions.find((entry) => String(entry.id) === String(row.season_id))
 
-      if (!player) return null
+      if (!player || getPositionGroup(player.position) === 'G') return null
 
       return {
         id: `${row.id}-${player.id}`,
@@ -707,6 +728,39 @@ export default function TeamPage() {
       } satisfies FranchiseSeasonStat
     })
     .filter((row): row is FranchiseSeasonStat => row !== null)
+  const franchiseGoalieStats = Object.values(
+    rawStats.reduce<Record<string, FranchiseGoalieStat>>((acc, row) => {
+      if (!matchesFranchiseGameType(row) || !row.player_id) return acc
+
+      const player = franchisePlayerMap.get(String(row.player_id))
+      if (!player || getPositionGroup(player.position) !== 'G') return acc
+
+      if (!acc[player.id]) {
+        acc[player.id] = {
+          id: player.id,
+          name: player.name,
+          position: player.position,
+          nationality: player.nationality,
+          gp: 0,
+          saves: 0,
+          shutouts: 0,
+          shotsAgainst: 0,
+          gk_percentage: 0,
+        }
+      }
+
+      acc[player.id].gp += Number(row.gp) || 0
+      acc[player.id].saves += Number(row.gk_saves) || 0
+      acc[player.id].shutouts += Number(row.goalie_shutouts) || 0
+      acc[player.id].shotsAgainst += Number(row.gk_shots_against) || 0
+
+      if (row.gk_percentage) {
+        acc[player.id].gk_percentage = Number(row.gk_percentage) || 0
+      }
+
+      return acc
+    }, {})
+  )
 
   return (
     <div style={pageWrap}>
@@ -825,6 +879,7 @@ export default function TeamPage() {
               gameType={franchiseGameType}
               onGameTypeChange={setFranchiseGameType}
               stats={franchiseStats}
+              goalieStats={franchiseGoalieStats}
               seasonStats={franchiseSeasonStats}
               showMoreHref={teamStatsPageHref}
             />
@@ -1006,7 +1061,7 @@ function GoalieStatsSection({ players }: { players: TeamPlayerStat[] }) {
                 player.saves + player.conceded > 0
                   ? (player.saves / (player.saves + player.conceded)).toFixed(3)
                   : '0'
-              const savePct = player.gk_percentage ? player.gk_percentage.toFixed(3) : calcPct
+              const savePct = formatSavePct(player.saves, player.saves + player.conceded, player.gk_percentage)
               const goalsAgainstAverage =
                 player.toi > 0
                   ? ((player.conceded * 60) / player.toi).toFixed(2)
@@ -1216,17 +1271,19 @@ function FranchiseAllTime({
   gameType,
   onGameTypeChange,
   stats,
+  goalieStats,
   seasonStats,
   showMoreHref,
 }: {
   gameType: 'regular' | 'playoffs'
   onGameTypeChange: (value: 'regular' | 'playoffs') => void
   stats: FranchiseStat[]
+  goalieStats: FranchiseGoalieStat[]
   seasonStats: FranchiseSeasonStat[]
   showMoreHref: string
 }) {
-  const buildContextHref = (label: string) =>
-    `${showMoreHref}?context=${encodeURIComponent(label)}`
+  const buildContextHref = (label: string, category: 'skaters' | 'goalies' = 'skaters') =>
+    `${showMoreHref}?tab=allTime&category=${category}&context=${encodeURIComponent(label)}`
   const sortBy = (key: keyof Pick<FranchiseStat, 'gp' | 'goals' | 'assists' | 'points' | 'hits'>) =>
     [...stats].sort((a, b) => Number(b[key]) - Number(a[key]) || b.points - a.points).slice(0, 5)
   const pointsPerGame = [...stats]
@@ -1235,6 +1292,21 @@ function FranchiseAllTime({
     .slice(0, 5)
   const pointsPerSeason = [...seasonStats]
     .sort((a, b) => b.points - a.points || b.goals - a.goals)
+    .slice(0, 5)
+  const goalieSaves = [...goalieStats]
+    .sort((a, b) => b.saves - a.saves || b.gp - a.gp)
+    .slice(0, 5)
+  const goalieShutouts = [...goalieStats]
+    .sort((a, b) => b.shutouts - a.shutouts || b.saves - a.saves)
+    .slice(0, 5)
+  const goalieSavePct = [...goalieStats]
+    .filter((player) => player.shotsAgainst > 0 || player.gk_percentage > 0)
+    .sort(
+      (a, b) =>
+        Number(formatSavePct(b.saves, b.shotsAgainst, b.gk_percentage)) -
+          Number(formatSavePct(a.saves, a.shotsAgainst, a.gk_percentage)) ||
+        b.saves - a.saves
+    )
     .slice(0, 5)
 
   return (
@@ -1257,32 +1329,38 @@ function FranchiseAllTime({
       </div>
 
       <div style={franchiseGrid}>
-        <FranchiseCard title="FRANCHISE ALL-TIME POINTS" stats={sortBy('points')} valueColumn="TP" rankBy="points" showMoreHref={buildContextHref('Franchise All-Time Points')} />
-        <FranchiseCard title="FRANCHISE ALL-TIME GOALS" stats={sortBy('goals')} valueColumn="TP" rankBy="goals" showMoreHref={buildContextHref('Franchise All-Time Goals')} />
-        <FranchiseCard title="FRANCHISE ALL-TIME ASSISTS" stats={sortBy('assists')} valueColumn="TP" rankBy="assists" showMoreHref={buildContextHref('Franchise All-Time Assists')} />
-        <FranchiseCard title="FRANCHISE ALL-TIME HITS" stats={sortBy('hits')} valueColumn="HITS" rankBy="hits" showMoreHref={buildContextHref('Franchise All-Time Hits')} />
-        <FranchiseCard title="FRANCHISE ALL-TIME GAMES PLAYED" stats={sortBy('gp')} valueColumn="TP" rankBy="gp" showMoreHref={buildContextHref('Franchise All-Time Games Played')} />
-        <FranchiseCard title="FRANCHISE ALL-TIME POINTS PER GAME" stats={pointsPerGame} valueColumn="PPG" rankBy="ppg" showMoreHref={buildContextHref('Franchise All-Time Points Per Game')} />
+        <FranchiseCard title="FRANCHISE ALL-TIME POINTS" stats={sortBy('points')} valueColumn="TP" rankBy="points" showMoreHref={buildContextHref('Franchise All-Time Points', 'skaters')} />
+        <FranchiseCard title="FRANCHISE ALL-TIME GOALS" stats={sortBy('goals')} valueColumn="TP" rankBy="goals" showMoreHref={buildContextHref('Franchise All-Time Goals', 'skaters')} />
+        <FranchiseCard title="FRANCHISE ALL-TIME ASSISTS" stats={sortBy('assists')} valueColumn="TP" rankBy="assists" showMoreHref={buildContextHref('Franchise All-Time Assists', 'skaters')} />
+        <FranchiseCard title="FRANCHISE ALL-TIME HITS" stats={sortBy('hits')} valueColumn="HITS" rankBy="hits" showMoreHref={buildContextHref('Franchise All-Time Hits', 'skaters')} />
+        <FranchiseCard title="FRANCHISE ALL-TIME GAMES PLAYED" stats={sortBy('gp')} valueColumn="TP" rankBy="gp" showMoreHref={buildContextHref('Franchise All-Time Games Played', 'skaters')} />
+        <FranchiseCard title="FRANCHISE ALL-TIME POINTS PER GAME" stats={pointsPerGame} valueColumn="PPG" rankBy="ppg" showMoreHref={buildContextHref('Franchise All-Time Points Per Game', 'skaters')} />
       </div>
 
-      <FranchiseSeasonCard title="FRANCHISE ALL-TIME POINTS PER SEASON" stats={pointsPerSeason} rankBy="points" showMoreHref={buildContextHref('Franchise All-Time Points Per Season')} />
+      <div style={franchiseGrid}>
+        <FranchiseGoalieCard title="FRANCHISE ALL-TIME SAVES" stats={goalieSaves} rankBy="saves" showMoreHref={buildContextHref('Franchise All-Time Saves', 'goalies')} />
+        <FranchiseGoalieCard title="FRANCHISE ALL-TIME SHUTOUTS" stats={goalieShutouts} rankBy="shutouts" showMoreHref={buildContextHref('Franchise All-Time Shutouts', 'goalies')} />
+        <FranchiseGoalieCard title="FRANCHISE ALL-TIME SAVE PERCENTAGE" stats={goalieSavePct} rankBy="savePct" showMoreHref={buildContextHref('Franchise All-Time Save Percentage', 'goalies')} />
+      </div>
+
+      <FranchiseSeasonCard title="FRANCHISE ALL-TIME POINTS PER SEASON" stats={pointsPerSeason} rankBy="points" showMoreHref={buildContextHref('Franchise All-Time Points Per Season', 'skaters')} />
       <FranchiseSeasonCard
         title="FRANCHISE ALL-TIME GOALS PER SEASON"
         stats={[...seasonStats].sort((a, b) => b.goals - a.goals || b.points - a.points).slice(0, 5)}
         rankBy="goals"
-        showMoreHref={buildContextHref('Franchise All-Time Goals Per Season')}
+        showMoreHref={buildContextHref('Franchise All-Time Goals Per Season', 'skaters')}
       />
       <FranchiseSeasonCard
         title="FRANCHISE ALL-TIME ASSISTS PER SEASON"
         stats={[...seasonStats].sort((a, b) => b.assists - a.assists || b.points - a.points).slice(0, 5)}
         rankBy="assists"
-        showMoreHref={buildContextHref('Franchise All-Time Assists Per Season')}
+        showMoreHref={buildContextHref('Franchise All-Time Assists Per Season', 'skaters')}
       />
       <FranchiseSeasonCard
         title="FRANCHISE ALL-TIME HITS PER SEASON"
         stats={[...seasonStats].sort((a, b) => b.hits - a.hits || b.points - a.points).slice(0, 5)}
         rankBy="hits"
-        showMoreHref={buildContextHref('Franchise All-Time Hits Per Season')}
+        showMoreHref={buildContextHref('Franchise All-Time Hits Per Season', 'skaters')}
       />
     </div>
   )
@@ -1347,6 +1425,70 @@ function FranchiseCard({
             <tr style={franchiseRow}>
               <td colSpan={6} style={emptyRosterCell}>
                 No franchise stats yet.
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+      <Link href={showMoreHref} style={showMoreBar}>
+        SHOW MORE
+      </Link>
+    </div>
+  )
+}
+
+function FranchiseGoalieCard({
+  title,
+  stats,
+  rankBy,
+  showMoreHref,
+}: {
+  title: string
+  stats: FranchiseGoalieStat[]
+  rankBy: FranchiseGoalieRankKey
+  showMoreHref: string
+}) {
+  return (
+    <div style={franchiseCard}>
+      <div style={franchiseCardTitle}>{title}</div>
+      <table style={franchiseTable}>
+        <thead>
+          <tr style={rosterTableHead}>
+            <th style={franchiseRankTh}>#</th>
+            <th style={franchisePlayerTh}>GOALIE</th>
+            <th style={franchiseStatTh}>GP</th>
+            <th style={franchiseStatTh}>SVS</th>
+            <th style={franchiseStatTh}>SO</th>
+            <th style={franchiseStatTh}>SV%</th>
+          </tr>
+        </thead>
+        <tbody>
+          {stats.map((player, index) => {
+            const flagUrl = getFlagUrl(player.nationality, player.nationality)
+            const savePct = formatSavePct(player.saves, player.shotsAgainst, player.gk_percentage)
+
+            return (
+              <tr key={player.id} style={index % 2 === 0 ? franchiseRowAlt : franchiseRow}>
+                <td style={franchiseRankTd}>{index + 1}.</td>
+                <td style={franchisePlayerTd}>
+                  <div style={playerCell}>
+                    {flagUrl ? <img src={flagUrl} alt={player.nationality || ''} style={rosterFlag} /> : null}
+                    <Link href={`/player/${player.id}`} style={playerLink}>
+                      {player.name} ({formatPosition(player.position)})
+                    </Link>
+                  </div>
+                </td>
+                <td style={franchiseStatTd}>{player.gp}</td>
+                <td style={rankBy === 'saves' ? franchisePrimaryStatTd : franchiseStatTd}>{player.saves}</td>
+                <td style={rankBy === 'shutouts' ? franchisePrimaryStatTd : franchiseStatTd}>{player.shutouts}</td>
+                <td style={rankBy === 'savePct' ? franchisePrimaryStatTd : franchiseStatTd}>{savePct}</td>
+              </tr>
+            )
+          })}
+          {stats.length === 0 ? (
+            <tr style={franchiseRow}>
+              <td colSpan={6} style={emptyRosterCell}>
+                No franchise goalie stats yet.
               </td>
             </tr>
           ) : null}

@@ -43,6 +43,11 @@ type StatRecord = {
   points?: number | null
   hits?: number | null
   plus_minus?: number | null
+  gk_saves?: number | null
+  gk_shots_against?: number | null
+  gk_percentage?: number | null
+  goalie_shutouts?: number | null
+  goalie_goals_against?: number | null
 }
 
 type StatTotals = {
@@ -58,6 +63,11 @@ type StatTotals = {
   points: number
   hits: number
   plusMinus: number
+  saves: number
+  shotsAgainst: number
+  savePct: number
+  shutouts: number
+  goalsAgainst: number
 }
 
 type TabKey = 'season' | 'allTime' | 'allTimeSeason' | 'allTimeTeam'
@@ -80,9 +90,29 @@ function formatPosition(position?: string | null) {
   return value || 'F'
 }
 
+function isGoaliePosition(position?: string | null) {
+  return Boolean(position?.toUpperCase().includes('G'))
+}
+
 function calcPoints(goals?: number | null, assists?: number | null, points?: number | null) {
   if (points !== null && points !== undefined) return Number(points) || 0
   return (Number(goals) || 0) + (Number(assists) || 0)
+}
+
+function formatSavePct(value?: number | null, saves?: number, shotsAgainst?: number) {
+  if (value && Number.isFinite(Number(value))) {
+    return Number(value).toFixed(3)
+  }
+  const against = Number(shotsAgainst) || 0
+  if (!against) return '0'
+  return ((Number(saves) || 0) / against).toFixed(3)
+}
+
+function formatGaa(goalsAgainst?: number, gp?: number, saves?: number, shotsAgainst?: number) {
+  const gamesPlayed = Number(gp) || 0
+  if (!gamesPlayed) return '0.00'
+  const against = Number(goalsAgainst) || Math.max((Number(shotsAgainst) || 0) - (Number(saves) || 0), 0)
+  return (against / gamesPlayed).toFixed(2)
 }
 
 export default function LeagueStatsPage() {
@@ -102,14 +132,20 @@ export default function LeagueStatsPage() {
   const [toSeasonId, setToSeasonId] = useState('')
   const [gameType, setGameType] = useState<'regular' | 'playoffs'>('regular')
   const [activeTab, setActiveTab] = useState<TabKey>('season')
+  const [activeCategory, setActiveCategory] = useState<'skaters' | 'goalies'>('skaters')
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
     const requestedTab = searchParams.get('tab')
+    const requestedCategory = searchParams.get('category')
 
     if (requestedTab === 'season' || requestedTab === 'allTime' || requestedTab === 'allTimeSeason' || requestedTab === 'allTimeTeam') {
       setActiveTab(requestedTab)
+    }
+
+    if (requestedCategory === 'skaters' || requestedCategory === 'goalies') {
+      setActiveCategory(requestedCategory)
     }
   }, [searchParams])
 
@@ -194,7 +230,7 @@ export default function LeagueStatsPage() {
       if (teamIds.length) {
         const { data: statsData, error: statsError } = await supabase
           .from('stats')
-          .select('id, player_id, team_id, season_id, game_type, gp, goals, assists, points, hits, plus_minus')
+          .select('id, player_id, team_id, season_id, game_type, gp, goals, assists, points, hits, plus_minus, gk_saves, gk_shots_against, gk_percentage, goalie_shutouts, goalie_goals_against')
           .in('team_id', teamIds)
 
         if (statsError) {
@@ -252,6 +288,7 @@ export default function LeagueStatsPage() {
   const activeLeagueName = league?.name || ''
   const selectedSeasonName = seasonsById.get(String(selectedSeasonId)) || ''
   const contextLabel = searchParams.get('context')?.trim() || ''
+  const showCategoryTabs = !contextLabel
   const tabLabel =
     activeTab === 'season'
       ? gameType === 'playoffs'
@@ -262,6 +299,7 @@ export default function LeagueStatsPage() {
         : activeTab === 'allTimeSeason'
           ? 'All-time / Season'
           : 'All-time / Team'
+  const statEntityLabel = activeCategory === 'goalies' ? 'GOALIE' : 'PLAYER'
   const headerTitle = activeLeagueName ? `${activeLeagueName} ${tabLabel} Stats` : 'League Stats'
 
   const matchesGameType = (row: StatRecord) => {
@@ -288,12 +326,29 @@ export default function LeagueStatsPage() {
     selectedSeasonId ? String(row.season_id) === String(selectedSeasonId) : true
   )
 
+  const matchesActiveCategory = (player?: PlayerRecord | null) => {
+    if (!player) return false
+    return activeCategory === 'goalies' ? isGoaliePosition(player.position) : !isGoaliePosition(player.position)
+  }
+
+  const getEffectiveSavePct = (row: StatTotals) => {
+    if (row.savePct) return row.savePct
+    return row.shotsAgainst ? row.saves / row.shotsAgainst : 0
+  }
+
+  const sortTotals = (rows: StatTotals[]) =>
+    [...rows].sort((a, b) =>
+      activeCategory === 'goalies'
+        ? getEffectiveSavePct(b) - getEffectiveSavePct(a) || b.saves - a.saves || b.shutouts - a.shutouts
+        : b.points - a.points || b.goals - a.goals
+    )
+
   const seasonTotals = useMemo(() => {
     const totals = new Map<string, StatTotals>()
     seasonStats.forEach((row) => {
       if (!row.player_id) return
       const player = playersById.get(String(row.player_id))
-      if (!player) return
+      if (!matchesActiveCategory(player)) return
 
       const key = String(row.player_id)
       const teamName = row.team_id ? teamsById.get(String(row.team_id))?.name || null : null
@@ -313,6 +368,11 @@ export default function LeagueStatsPage() {
           points: 0,
           hits: 0,
           plusMinus: 0,
+          saves: 0,
+          shotsAgainst: 0,
+          savePct: 0,
+          shutouts: 0,
+          goalsAgainst: 0,
         })
       }
 
@@ -324,6 +384,13 @@ export default function LeagueStatsPage() {
       entry.points += points
       entry.hits += Number(row.hits) || 0
       entry.plusMinus += Number(row.plus_minus) || 0
+      entry.saves += Number(row.gk_saves) || 0
+      entry.shotsAgainst += Number(row.gk_shots_against) || 0
+      entry.shutouts += Number(row.goalie_shutouts) || 0
+      entry.goalsAgainst +=
+        row.goalie_goals_against !== null && row.goalie_goals_against !== undefined
+          ? Number(row.goalie_goals_against) || 0
+          : Math.max((Number(row.gk_shots_against) || 0) - (Number(row.gk_saves) || 0), 0)
 
       if (teamName && entry.teamName && entry.teamName !== teamName) {
         entry.teamName = 'Multiple'
@@ -332,15 +399,15 @@ export default function LeagueStatsPage() {
       }
     })
 
-    return Array.from(totals.values()).sort((a, b) => b.points - a.points || b.goals - a.goals)
-  }, [seasonStats, playersById, teamsById])
+    return sortTotals(Array.from(totals.values()))
+  }, [seasonStats, playersById, teamsById, activeCategory])
 
   const allTimeTotals = useMemo(() => {
     const totals = new Map<string, StatTotals>()
     filteredStats.forEach((row) => {
       if (!row.player_id) return
       const player = playersById.get(String(row.player_id))
-      if (!player) return
+      if (!matchesActiveCategory(player)) return
       const key = String(row.player_id)
       const points = calcPoints(row.goals, row.assists, row.points)
       if (!totals.has(key)) {
@@ -357,6 +424,11 @@ export default function LeagueStatsPage() {
           points: 0,
           hits: 0,
           plusMinus: 0,
+          saves: 0,
+          shotsAgainst: 0,
+          savePct: 0,
+          shutouts: 0,
+          goalsAgainst: 0,
         })
       }
       const entry = totals.get(key)!
@@ -367,17 +439,24 @@ export default function LeagueStatsPage() {
       entry.points += points
       entry.hits += Number(row.hits) || 0
       entry.plusMinus += Number(row.plus_minus) || 0
+      entry.saves += Number(row.gk_saves) || 0
+      entry.shotsAgainst += Number(row.gk_shots_against) || 0
+      entry.shutouts += Number(row.goalie_shutouts) || 0
+      entry.goalsAgainst +=
+        row.goalie_goals_against !== null && row.goalie_goals_against !== undefined
+          ? Number(row.goalie_goals_against) || 0
+          : Math.max((Number(row.gk_shots_against) || 0) - (Number(row.gk_saves) || 0), 0)
     })
 
-    return Array.from(totals.values()).sort((a, b) => b.points - a.points || b.goals - a.goals)
-  }, [filteredStats, playersById])
+    return sortTotals(Array.from(totals.values()))
+  }, [filteredStats, playersById, activeCategory])
 
   const allTimeSeasonTotals = useMemo(() => {
     const totals = new Map<string, StatTotals>()
     filteredStats.forEach((row) => {
       if (!row.player_id || !row.season_id) return
       const player = playersById.get(String(row.player_id))
-      if (!player) return
+      if (!matchesActiveCategory(player)) return
       const key = `${row.player_id}-${row.season_id}`
       const points = calcPoints(row.goals, row.assists, row.points)
       const teamName = row.team_id ? teamsById.get(String(row.team_id))?.name || null : null
@@ -396,6 +475,11 @@ export default function LeagueStatsPage() {
           points: 0,
           hits: 0,
           plusMinus: 0,
+          saves: 0,
+          shotsAgainst: 0,
+          savePct: 0,
+          shutouts: 0,
+          goalsAgainst: 0,
         })
       }
 
@@ -406,6 +490,13 @@ export default function LeagueStatsPage() {
       entry.points += points
       entry.hits += Number(row.hits) || 0
       entry.plusMinus += Number(row.plus_minus) || 0
+      entry.saves += Number(row.gk_saves) || 0
+      entry.shotsAgainst += Number(row.gk_shots_against) || 0
+      entry.shutouts += Number(row.goalie_shutouts) || 0
+      entry.goalsAgainst +=
+        row.goalie_goals_against !== null && row.goalie_goals_against !== undefined
+          ? Number(row.goalie_goals_against) || 0
+          : Math.max((Number(row.gk_shots_against) || 0) - (Number(row.gk_saves) || 0), 0)
 
       if (teamName && entry.teamName && entry.teamName !== teamName) {
         entry.teamName = 'Multiple'
@@ -414,15 +505,15 @@ export default function LeagueStatsPage() {
       }
     })
 
-    return Array.from(totals.values()).sort((a, b) => b.points - a.points || b.goals - a.goals)
-  }, [filteredStats, playersById, teamsById])
+    return sortTotals(Array.from(totals.values()))
+  }, [filteredStats, playersById, teamsById, activeCategory])
 
   const allTimeTeamTotals = useMemo(() => {
     const totals = new Map<string, StatTotals>()
     filteredStats.forEach((row) => {
       if (!row.player_id || !row.team_id) return
       const player = playersById.get(String(row.player_id))
-      if (!player) return
+      if (!matchesActiveCategory(player)) return
       const key = `${row.player_id}-${row.team_id}`
       const points = calcPoints(row.goals, row.assists, row.points)
       const teamName = teamsById.get(String(row.team_id))?.name || null
@@ -441,6 +532,11 @@ export default function LeagueStatsPage() {
           points: 0,
           hits: 0,
           plusMinus: 0,
+          saves: 0,
+          shotsAgainst: 0,
+          savePct: 0,
+          shutouts: 0,
+          goalsAgainst: 0,
         })
       }
 
@@ -452,10 +548,17 @@ export default function LeagueStatsPage() {
       entry.points += points
       entry.hits += Number(row.hits) || 0
       entry.plusMinus += Number(row.plus_minus) || 0
+      entry.saves += Number(row.gk_saves) || 0
+      entry.shotsAgainst += Number(row.gk_shots_against) || 0
+      entry.shutouts += Number(row.goalie_shutouts) || 0
+      entry.goalsAgainst +=
+        row.goalie_goals_against !== null && row.goalie_goals_against !== undefined
+          ? Number(row.goalie_goals_against) || 0
+          : Math.max((Number(row.gk_shots_against) || 0) - (Number(row.gk_saves) || 0), 0)
     })
 
-    return Array.from(totals.values()).sort((a, b) => b.points - a.points || b.goals - a.goals)
-  }, [filteredStats, playersById, teamsById])
+    return sortTotals(Array.from(totals.values()))
+  }, [filteredStats, playersById, teamsById, activeCategory])
 
   const leagueFlagUrl = getFlagUrl(league?.country_code)
 
@@ -502,6 +605,17 @@ export default function LeagueStatsPage() {
             All-time / Team
           </button>
         </div>
+
+        {showCategoryTabs ? (
+          <div style={categoryTabs}>
+            <button type="button" onClick={() => setActiveCategory('skaters')} style={activeCategory === 'skaters' ? categoryTabActive : categoryTab}>
+              SKATERS
+            </button>
+            <button type="button" onClick={() => setActiveCategory('goalies')} style={activeCategory === 'goalies' ? categoryTabActive : categoryTab}>
+              GOALIES
+            </button>
+          </div>
+        ) : null}
 
         <div style={filtersCard}>
           <div style={filtersRow}>
@@ -576,7 +690,7 @@ export default function LeagueStatsPage() {
             title={
               contextLabel
                 ? contextLabel.toUpperCase()
-                : `${selectedSeasonName || 'Season'} ${gameType === 'playoffs' ? 'PLAYOFFS' : 'REGULAR SEASON'} PLAYER STATS`
+                : `${selectedSeasonName || 'Season'} ${gameType === 'playoffs' ? 'PLAYOFFS' : 'REGULAR SEASON'} ${statEntityLabel} STATS`
             }
             rows={seasonTotals}
             teamsById={teamsById}
@@ -585,6 +699,7 @@ export default function LeagueStatsPage() {
             showTeam
             showPeriod={false}
             showYears={false}
+            category={activeCategory}
             isLoading={isLoading}
           />
         ) : null}
@@ -594,7 +709,7 @@ export default function LeagueStatsPage() {
             title={
               contextLabel
                 ? contextLabel.toUpperCase()
-                : `ALL-TIME TOTALS ${gameType === 'playoffs' ? 'PLAYOFFS' : 'REGULAR SEASON'} PLAYER STATS`
+                : `ALL-TIME TOTALS ${gameType === 'playoffs' ? 'PLAYOFFS' : 'REGULAR SEASON'} ${statEntityLabel} STATS`
             }
             rows={allTimeTotals}
             teamsById={teamsById}
@@ -603,6 +718,7 @@ export default function LeagueStatsPage() {
             showTeam={false}
             showPeriod
             showYears
+            category={activeCategory}
             isLoading={isLoading}
           />
         ) : null}
@@ -612,7 +728,7 @@ export default function LeagueStatsPage() {
             title={
               contextLabel
                 ? contextLabel.toUpperCase()
-                : `ALL-TIME SEASON ${gameType === 'playoffs' ? 'PLAYOFFS' : 'REGULAR SEASON'} PLAYER STATS`
+                : `ALL-TIME SEASON ${gameType === 'playoffs' ? 'PLAYOFFS' : 'REGULAR SEASON'} ${statEntityLabel} STATS`
             }
             rows={allTimeSeasonTotals}
             teamsById={teamsById}
@@ -621,6 +737,7 @@ export default function LeagueStatsPage() {
             showTeam
             showPeriod={false}
             showYears={false}
+            category={activeCategory}
             isLoading={isLoading}
           />
         ) : null}
@@ -630,7 +747,7 @@ export default function LeagueStatsPage() {
             title={
               contextLabel
                 ? contextLabel.toUpperCase()
-                : `ALL-TIME TOTALS/TEAM ${gameType === 'playoffs' ? 'PLAYOFFS' : 'REGULAR SEASON'} PLAYER STATS`
+                : `ALL-TIME TOTALS/TEAM ${gameType === 'playoffs' ? 'PLAYOFFS' : 'REGULAR SEASON'} ${statEntityLabel} STATS`
             }
             rows={allTimeTeamTotals}
             teamsById={teamsById}
@@ -639,6 +756,7 @@ export default function LeagueStatsPage() {
             showTeam
             showPeriod
             showYears
+            category={activeCategory}
             isLoading={isLoading}
           />
         ) : null}
@@ -656,6 +774,7 @@ function StatsTable({
   showTeam,
   showPeriod,
   showYears,
+  category,
   isLoading,
 }: {
   title: string
@@ -666,6 +785,7 @@ function StatsTable({
   showTeam: boolean
   showPeriod: boolean
   showYears: boolean
+  category: 'skaters' | 'goalies'
   isLoading: boolean
 }) {
   return (
@@ -679,12 +799,23 @@ function StatsTable({
             {showSeason ? <th style={seasonTh}>SEASON</th> : null}
             {showTeam ? <th style={teamTh}>TEAM</th> : null}
             <th style={statTh}>GP</th>
-            <th style={statTh}>G</th>
-            <th style={statTh}>A</th>
-            <th style={statTh}>TP</th>
-            <th style={statTh}>PPG</th>
-            <th style={statTh}>HITS</th>
-            <th style={statTh}>+/-</th>
+            {category === 'goalies' ? (
+              <>
+                <th style={statTh}>SVS</th>
+                <th style={statTh}>SO</th>
+                <th style={statTh}>SV%</th>
+                <th style={statTh}>GAA</th>
+              </>
+            ) : (
+              <>
+                <th style={statTh}>G</th>
+                <th style={statTh}>A</th>
+                <th style={statTh}>TP</th>
+                <th style={statTh}>PPG</th>
+                <th style={statTh}>HITS</th>
+                <th style={statTh}>+/-</th>
+              </>
+            )}
             {showPeriod ? <th style={statTh}>PERIOD</th> : null}
             {showYears ? <th style={statTh}>YEARS</th> : null}
           </tr>
@@ -724,12 +855,23 @@ function StatsTable({
                 {showSeason ? <td style={seasonTd}>{seasonLabel}</td> : null}
                 {showTeam ? <td style={teamTd}>{teamLabel}</td> : null}
                 <td style={statTd}>{row.gp}</td>
-                <td style={statTd}>{row.goals}</td>
-                <td style={statTd}>{row.assists}</td>
-                <td style={statPrimaryTd}>{row.points}</td>
-                <td style={statTd}>{ppg}</td>
-                <td style={statTd}>{row.hits}</td>
-                <td style={statTd}>{row.plusMinus}</td>
+                {category === 'goalies' ? (
+                  <>
+                    <td style={statTd}>{row.saves}</td>
+                    <td style={statTd}>{row.shutouts}</td>
+                    <td style={statPrimaryTd}>{formatSavePct(undefined, row.saves, row.shotsAgainst)}</td>
+                    <td style={statTd}>{formatGaa(row.goalsAgainst, row.gp, row.saves, row.shotsAgainst)}</td>
+                  </>
+                ) : (
+                  <>
+                    <td style={statTd}>{row.goals}</td>
+                    <td style={statTd}>{row.assists}</td>
+                    <td style={statPrimaryTd}>{row.points}</td>
+                    <td style={statTd}>{ppg}</td>
+                    <td style={statTd}>{row.hits}</td>
+                    <td style={statTd}>{row.plusMinus}</td>
+                  </>
+                )}
                 {showPeriod ? <td style={statTd}>{period}</td> : null}
                 {showYears ? <td style={statTd}>{years}</td> : null}
               </tr>
@@ -808,6 +950,31 @@ const tabsRow = {
   display: 'flex',
   gap: 8,
   marginBottom: 12,
+}
+
+const categoryTabs = {
+  display: 'flex',
+  gap: 0,
+  marginBottom: 14,
+  borderBottom: '1px solid #d7dee6',
+}
+
+const categoryTab = {
+  flex: 1,
+  maxWidth: 220,
+  padding: '12px 14px',
+  border: 'none',
+  borderBottom: '2px solid transparent',
+  background: 'transparent',
+  color: '#173650',
+  fontSize: 13,
+  fontWeight: 800,
+  cursor: 'pointer',
+}
+
+const categoryTabActive = {
+  ...categoryTab,
+  borderBottom: '2px solid #2a73ad',
 }
 
 const tab = {

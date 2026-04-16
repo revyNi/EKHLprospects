@@ -9,9 +9,6 @@ import { supabase } from '../../../../lib/supabaseClient'
 type LeagueRecord = {
   id: string
   name: string
-  display_name?: string | null
-  abbreviation?: string | null
-  short_name?: string | null
   country_code?: string | null
 }
 
@@ -163,7 +160,7 @@ export default function LeagueGamesPage() {
 
       const { data: leaguesData, error: leaguesError } = await supabase
         .from('leagues')
-        .select('id, name, display_name, abbreviation, short_name, country_code')
+        .select('id, name, country_code')
 
       if (leaguesError) {
         setLeague(null)
@@ -180,7 +177,7 @@ export default function LeagueGamesPage() {
       const leagueRecord =
         leagueRows.find((row) => String(row.id) === identifier) ||
         leagueRows.find((row) =>
-          [row.name, row.display_name, row.abbreviation, row.short_name]
+          [row.name]
             .filter(Boolean)
             .some((value) => normalizeLookupValue(value) === normalizedIdentifier)
         ) ||
@@ -196,12 +193,7 @@ export default function LeagueGamesPage() {
         return
       }
 
-      const leagueNames = [
-        leagueRecord.name,
-        leagueRecord.display_name,
-        leagueRecord.abbreviation,
-        leagueRecord.short_name,
-      ].filter(Boolean) as string[]
+      const leagueNames = [leagueRecord.name].filter(Boolean) as string[]
 
       const [
         { data: teamsData, error: teamsError },
@@ -239,7 +231,7 @@ export default function LeagueGamesPage() {
   }, [identifier])
 
   const teamsById = useMemo(() => new Map(teams.map((team) => [String(team.id), team])), [teams])
-  const selectedLeagueName = league?.display_name || league?.name || 'League'
+  const selectedLeagueName = league?.name || 'League'
   const leagueFlagUrl = getFlagUrl(league?.country_code)
 
   const filteredMatches = useMemo(() => {
@@ -345,7 +337,7 @@ export default function LeagueGamesPage() {
                 dateMatches.map((match, index) => {
                   const homeTeam = match.home_team_id ? teamsById.get(String(match.home_team_id)) : null
                   const visitingTeam = match.visiting_team_id ? teamsById.get(String(match.visiting_team_id)) : null
-                  const leagueLabel = league?.abbreviation || league?.short_name || league?.name || 'League'
+                  const leagueLabel = league?.name || 'League'
 
                   return (
                     <tr key={match.id} style={index % 2 === 0 ? tableRowAlt : tableRow}>

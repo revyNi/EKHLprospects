@@ -61,6 +61,7 @@ type SidebarPlayerOption = {
   id: string
   name: string
   nationality?: string | null
+  position?: string | null
 }
 
 type SidebarStatRecord = {
@@ -342,6 +343,10 @@ function getNationalityFlagUrl(nationality?: string | null) {
   return countryCode ? getSearchFlagUrl(countryCode) : null
 }
 
+function isGoaliePosition(position?: string | null) {
+  return Boolean(position?.toUpperCase().includes('G'))
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -567,7 +572,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       const [{ data: playersData }, { data: teamsData }, { data: statsData }] = await Promise.all([
         supabase
           .from('players')
-          .select('id, name, nationality')
+          .select('id, name, nationality, position')
           .order('name', { ascending: true }),
         supabase.from('teams').select('id, league, logo_url'),
         supabase
@@ -738,6 +743,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
       }
 
       const player = leaderPlayersById.get(String(stat.player_id))
+      if (!player || isGoaliePosition(player.position)) return acc
       if (!player) return acc
 
       if (!acc[player.id]) {

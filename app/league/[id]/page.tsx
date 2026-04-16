@@ -74,6 +74,7 @@ type StatRecord = {
   gk_shots_against?: number | null
   gk_percentage?: number | null
   goalie_goals_against?: number | null
+  goalie_shutouts?: number | null
 }
 
 type MatchRecord = {
@@ -138,6 +139,18 @@ type LeagueFranchiseStat = {
   hits: number
 }
 
+type LeagueGoalieFranchiseStat = {
+  id: string
+  name: string
+  position?: string | null
+  nationality?: string | null
+  gp: number
+  saves: number
+  shutouts: number
+  shotsAgainst: number
+  gk_percentage: number
+}
+
 type LeagueFranchiseSeasonStat = LeagueFranchiseStat & {
   seasonName: string
   leagueName: string
@@ -188,7 +201,7 @@ function isGoaliePosition(position?: string | null) {
 
 function formatSavePct(saves: number, shotsAgainst: number, savedPct?: number | null) {
   const rawValue =
-    savedPct !== null && savedPct !== undefined
+    savedPct && Number.isFinite(Number(savedPct))
       ? Number(savedPct)
       : shotsAgainst
         ? saves / shotsAgainst
@@ -197,6 +210,14 @@ function formatSavePct(saves: number, shotsAgainst: number, savedPct?: number | 
   if (!Number.isFinite(rawValue)) return '0'
 
   return rawValue.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+function formatStoredSavePct(savedPct?: number | null, saves?: number, shotsAgainst?: number) {
+  if (savedPct && Number.isFinite(Number(savedPct))) {
+    return Number(savedPct).toFixed(3)
+  }
+
+  return formatSavePct(Number(saves) || 0, Number(shotsAgainst) || 0, savedPct)
 }
 
 function formatGaa(goalsAgainst: number, gp: number) {
@@ -360,7 +381,7 @@ export default function LeagueDetailPage() {
       if (teamIds.length) {
         const { data: statsData, error: statsError } = await supabase
           .from('stats')
-          .select('id, player_id, team_id, season_id, game_type, gp, goals, assists, points, hits, gk_saves, gk_shots_against, gk_percentage, goalie_goals_against')
+          .select('id, player_id, team_id, season_id, game_type, gp, goals, assists, points, hits, gk_saves, gk_shots_against, gk_percentage, goalie_goals_against, goalie_shutouts')
           .in('team_id', teamIds)
 
         if (statsError) {
@@ -522,6 +543,39 @@ export default function LeagueDetailPage() {
       } satisfies LeagueFranchiseSeasonStat
     })
     .filter(Boolean) as LeagueFranchiseSeasonStat[]
+  const allTimeGoalieTotals = Object.values(
+    allTimeSourceStats.reduce<Record<string, LeagueGoalieFranchiseStat>>((acc, stat) => {
+      if (!stat.player_id) return acc
+
+      const player = playersById.get(String(stat.player_id))
+      if (!player || !isGoaliePosition(player.position)) return acc
+
+      if (!acc[player.id]) {
+        acc[player.id] = {
+          id: player.id,
+          name: player.name,
+          position: player.position,
+          nationality: player.nationality,
+          gp: 0,
+          saves: 0,
+          shutouts: 0,
+          shotsAgainst: 0,
+          gk_percentage: 0,
+        }
+      }
+
+      acc[player.id].gp += Number(stat.gp) || 0
+      acc[player.id].saves += Number(stat.gk_saves) || 0
+      acc[player.id].shutouts += Number(stat.goalie_shutouts) || 0
+      acc[player.id].shotsAgainst += Number(stat.gk_shots_against) || 0
+
+      if (stat.gk_percentage) {
+        acc[player.id].gk_percentage = Number(stat.gk_percentage) || 0
+      }
+
+      return acc
+    }, {})
+  )
   const leaguePlayerTotals = Object.values(
     selectedLeagueStats.reduce<Record<string, LeaguePlayerStat>>((acc, stat) => {
       if (!stat.player_id) return acc
@@ -738,13 +792,13 @@ export default function LeagueDetailPage() {
             title={`${selectedSeasonLabel} ${leagueShortName.toUpperCase()} PLAYER STATS`}
             players={topSkaters}
             kind="skater"
-            showMoreHref={`${statsPageHref}?context=${encodeURIComponent(`${selectedSeasonLabel} ${leagueShortName} Player Stats`)}`}
+            showMoreHref={`${statsPageHref}?tab=season&category=skaters&context=${encodeURIComponent(`${selectedSeasonLabel} ${leagueShortName} Player Stats`)}`}
           />
           <LeaguePlayerStatsCard
             title={`${selectedSeasonLabel} ${leagueShortName.toUpperCase()} GOALIE STATS`}
             players={topGoalies}
             kind="goalie"
-            showMoreHref={`${statsPageHref}?context=${encodeURIComponent(`${selectedSeasonLabel} ${leagueShortName} Goalie Stats`)}`}
+            showMoreHref={`${statsPageHref}?tab=season&category=goalies&context=${encodeURIComponent(`${selectedSeasonLabel} ${leagueShortName} Goalie Stats`)}`}
           />
         </div>
 
@@ -762,6 +816,7 @@ export default function LeagueDetailPage() {
           gameType={allTimeGameType}
           onGameTypeChange={setAllTimeGameType}
           stats={allTimePlayerTotals}
+          goalieStats={allTimeGoalieTotals}
           seasonStats={allTimeSeasonStats}
           showMoreHref={statsPageHref}
         />
@@ -975,6 +1030,7 @@ function LeagueAllTimeSection({
   gameType,
   onGameTypeChange,
   stats,
+  goalieStats,
   seasonStats,
   showMoreHref,
 }: {
@@ -982,11 +1038,12 @@ function LeagueAllTimeSection({
   gameType: 'regular' | 'playoffs'
   onGameTypeChange: (value: 'regular' | 'playoffs') => void
   stats: LeagueFranchiseStat[]
+  goalieStats: LeagueGoalieFranchiseStat[]
   seasonStats: LeagueFranchiseSeasonStat[]
   showMoreHref: string
 }) {
-  const buildContextHref = (label: string) =>
-    `${showMoreHref}?context=${encodeURIComponent(label)}`
+  const buildContextHref = (label: string, category: 'skaters' | 'goalies' = 'skaters') =>
+    `${showMoreHref}?tab=allTime&category=${category}&context=${encodeURIComponent(label)}`
   const sortBy = (key: keyof Pick<LeagueFranchiseStat, 'gp' | 'goals' | 'assists' | 'points' | 'hits'>) =>
     [...stats].sort((a, b) => Number(b[key]) - Number(a[key]) || b.points - a.points).slice(0, 5)
   const pointsPerGame = [...stats]
@@ -995,6 +1052,21 @@ function LeagueAllTimeSection({
     .slice(0, 5)
   const pointsPerSeason = [...seasonStats]
     .sort((a, b) => b.points - a.points || b.goals - a.goals)
+    .slice(0, 5)
+  const goalieSaves = [...goalieStats]
+    .sort((a, b) => b.saves - a.saves || b.gp - a.gp)
+    .slice(0, 5)
+  const goalieShutouts = [...goalieStats]
+    .sort((a, b) => b.shutouts - a.shutouts || b.saves - a.saves)
+    .slice(0, 5)
+  const goalieSavePct = [...goalieStats]
+    .filter((player) => player.shotsAgainst > 0 || player.gk_percentage > 0)
+    .sort(
+      (a, b) =>
+        Number(formatSavePct(b.saves, b.shotsAgainst, b.gk_percentage)) -
+          Number(formatSavePct(a.saves, a.shotsAgainst, a.gk_percentage)) ||
+        b.saves - a.saves
+    )
     .slice(0, 5)
 
   return (
@@ -1017,43 +1089,65 @@ function LeagueAllTimeSection({
       </div>
 
       <div style={leaderboardGrid}>
-        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME POINTS`} stats={sortBy('points')} valueColumn="TP" rankBy="points" showMoreHref={buildContextHref(`${leagueShortName} All-Time Points`)} />
-        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME GOALS`} stats={sortBy('goals')} valueColumn="TP" rankBy="goals" showMoreHref={buildContextHref(`${leagueShortName} All-Time Goals`)} />
-        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME ASSISTS`} stats={sortBy('assists')} valueColumn="TP" rankBy="assists" showMoreHref={buildContextHref(`${leagueShortName} All-Time Assists`)} />
-        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME HITS`} stats={sortBy('hits')} valueColumn="HITS" rankBy="hits" showMoreHref={buildContextHref(`${leagueShortName} All-Time Hits`)} />
-        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME GAMES PLAYED`} stats={sortBy('gp')} valueColumn="TP" rankBy="gp" showMoreHref={buildContextHref(`${leagueShortName} All-Time Games Played`)} />
-        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME POINTS PER GAME`} stats={pointsPerGame} valueColumn="PPG" rankBy="ppg" showMoreHref={buildContextHref(`${leagueShortName} All-Time Points Per Game`)} />
+        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME POINTS`} stats={sortBy('points')} valueColumn="TP" rankBy="points" showMoreHref={buildContextHref(`${leagueShortName} All-Time Points`, 'skaters')} />
+        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME GOALS`} stats={sortBy('goals')} valueColumn="TP" rankBy="goals" showMoreHref={buildContextHref(`${leagueShortName} All-Time Goals`, 'skaters')} />
+        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME ASSISTS`} stats={sortBy('assists')} valueColumn="TP" rankBy="assists" showMoreHref={buildContextHref(`${leagueShortName} All-Time Assists`, 'skaters')} />
+        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME HITS`} stats={sortBy('hits')} valueColumn="HITS" rankBy="hits" showMoreHref={buildContextHref(`${leagueShortName} All-Time Hits`, 'skaters')} />
+        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME GAMES PLAYED`} stats={sortBy('gp')} valueColumn="TP" rankBy="gp" showMoreHref={buildContextHref(`${leagueShortName} All-Time Games Played`, 'skaters')} />
+        <LeagueAllTimeCard title={`${leagueShortName.toUpperCase()} ALL-TIME POINTS PER GAME`} stats={pointsPerGame} valueColumn="PPG" rankBy="ppg" showMoreHref={buildContextHref(`${leagueShortName} All-Time Points Per Game`, 'skaters')} />
+      </div>
+
+      <div style={leaderboardGrid}>
+        <LeagueAllTimeGoalieCard
+          title={`${leagueShortName.toUpperCase()} ALL-TIME SAVES`}
+          stats={goalieSaves}
+          rankBy="saves"
+          showMoreHref={buildContextHref(`${leagueShortName} All-Time Saves`, 'goalies')}
+        />
+        <LeagueAllTimeGoalieCard
+          title={`${leagueShortName.toUpperCase()} ALL-TIME SHUTOUTS`}
+          stats={goalieShutouts}
+          rankBy="shutouts"
+          showMoreHref={buildContextHref(`${leagueShortName} All-Time Shutouts`, 'goalies')}
+        />
+        <LeagueAllTimeGoalieCard
+          title={`${leagueShortName.toUpperCase()} ALL-TIME SAVE PERCENTAGE`}
+          stats={goalieSavePct}
+          rankBy="savePct"
+          showMoreHref={buildContextHref(`${leagueShortName} All-Time Save Percentage`, 'goalies')}
+        />
       </div>
 
       <LeagueAllTimeSeasonCard
         title={`${leagueShortName.toUpperCase()} ALL-TIME POINTS PER SEASON`}
         stats={pointsPerSeason}
         rankBy="points"
-        showMoreHref={buildContextHref(`${leagueShortName} All-Time Points Per Season`)}
+        showMoreHref={buildContextHref(`${leagueShortName} All-Time Points Per Season`, 'skaters')}
       />
       <LeagueAllTimeSeasonCard
         title={`${leagueShortName.toUpperCase()} ALL-TIME GOALS PER SEASON`}
         stats={[...seasonStats].sort((a, b) => b.goals - a.goals || b.points - a.points).slice(0, 5)}
         rankBy="goals"
-        showMoreHref={buildContextHref(`${leagueShortName} All-Time Goals Per Season`)}
+        showMoreHref={buildContextHref(`${leagueShortName} All-Time Goals Per Season`, 'skaters')}
       />
       <LeagueAllTimeSeasonCard
         title={`${leagueShortName.toUpperCase()} ALL-TIME ASSISTS PER SEASON`}
         stats={[...seasonStats].sort((a, b) => b.assists - a.assists || b.points - a.points).slice(0, 5)}
         rankBy="assists"
-        showMoreHref={buildContextHref(`${leagueShortName} All-Time Assists Per Season`)}
+        showMoreHref={buildContextHref(`${leagueShortName} All-Time Assists Per Season`, 'skaters')}
       />
       <LeagueAllTimeSeasonCard
         title={`${leagueShortName.toUpperCase()} ALL-TIME HITS PER SEASON`}
         stats={[...seasonStats].sort((a, b) => b.hits - a.hits || b.points - a.points).slice(0, 5)}
         rankBy="hits"
-        showMoreHref={buildContextHref(`${leagueShortName} All-Time Hits Per Season`)}
+        showMoreHref={buildContextHref(`${leagueShortName} All-Time Hits Per Season`, 'skaters')}
       />
     </div>
   )
 }
 
 type LeagueRankKey = 'points' | 'goals' | 'assists' | 'hits' | 'gp' | 'ppg'
+type LeagueGoalieRankKey = 'saves' | 'shutouts' | 'savePct'
 
 function LeagueAllTimeCard({
   title,
@@ -1114,6 +1208,70 @@ function LeagueAllTimeCard({
             <tr style={standingRow}>
               <td colSpan={6} style={emptyText}>
                 No league all-time stats yet.
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+      <Link href={showMoreHref} style={showMoreBar}>
+        SHOW MORE
+      </Link>
+    </div>
+  )
+}
+
+function LeagueAllTimeGoalieCard({
+  title,
+  stats,
+  rankBy,
+  showMoreHref,
+}: {
+  title: string
+  stats: LeagueGoalieFranchiseStat[]
+  rankBy: LeagueGoalieRankKey
+  showMoreHref: string
+}) {
+  return (
+    <div style={leaderboardCard}>
+      <div style={sectionHeader}>{title}</div>
+      <table style={standingsTable}>
+        <thead>
+          <tr style={standingsHeadRow}>
+            <th style={standingRankTh}>#</th>
+            <th style={standingTeamTh}>GOALIE</th>
+            <th style={standingStatTh}>GP</th>
+            <th style={standingStatTh}>SVS</th>
+            <th style={standingStatTh}>SO</th>
+            <th style={standingStatTh}>SV%</th>
+          </tr>
+        </thead>
+        <tbody>
+          {stats.map((player, index) => {
+            const flagUrl = getFlagUrl(player.nationality, player.nationality)
+            const savePct = formatStoredSavePct(player.gk_percentage, player.saves, player.shotsAgainst)
+
+            return (
+              <tr key={player.id} style={index % 2 === 0 ? standingRowAlt : standingRow}>
+                <td style={standingRankTd}>{index + 1}.</td>
+                <td style={standingTeamTd}>
+                  <Link href={`/player/${player.id}`} style={teamLink}>
+                    {flagUrl ? <img src={flagUrl} alt={player.nationality || ''} style={teamFlag} /> : null}
+                    <span>
+                      {player.name} ({player.position || 'G'})
+                    </span>
+                  </Link>
+                </td>
+                <td style={standingStatTd}>{player.gp}</td>
+                <td style={rankBy === 'saves' ? standingPrimaryTd : standingStatTd}>{player.saves}</td>
+                <td style={rankBy === 'shutouts' ? standingPrimaryTd : standingStatTd}>{player.shutouts}</td>
+                <td style={rankBy === 'savePct' ? standingPrimaryTd : standingStatTd}>{savePct}</td>
+              </tr>
+            )
+          })}
+          {stats.length === 0 ? (
+            <tr style={standingRow}>
+              <td colSpan={6} style={emptyText}>
+                No league goalie all-time stats yet.
               </td>
             </tr>
           ) : null}
