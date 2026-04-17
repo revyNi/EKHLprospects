@@ -382,6 +382,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [leaderTeams, setLeaderTeams] = useState<SearchTeamOption[]>([])
   const [leaderStats, setLeaderStats] = useState<SidebarStatRecord[]>([])
   const [selectedLeaderLeague, setSelectedLeaderLeague] = useState('')
+  const [routeProgress, setRouteProgress] = useState(100)
+  const [showRouteProgress, setShowRouteProgress] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -406,6 +408,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       subscription.unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    setShowRouteProgress(true)
+    setRouteProgress(10)
+
+    const timers = [
+      setTimeout(() => setRouteProgress(42), 90),
+      setTimeout(() => setRouteProgress(68), 220),
+      setTimeout(() => setRouteProgress(84), 420),
+      setTimeout(() => setRouteProgress(100), 760),
+      setTimeout(() => setShowRouteProgress(false), 980),
+    ]
+
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer))
+    }
+  }, [pathname])
 
   useEffect(() => {
     if (!isAdmin) {
@@ -1271,6 +1290,16 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                 ) : null}
               </div> : null}
             </div>
+          </div>
+
+          <div style={progressBarShell}>
+            <div
+              style={{
+                ...progressBar,
+                width: showRouteProgress ? `${routeProgress}%` : '0%',
+                opacity: showRouteProgress ? 1 : 0,
+              }}
+            />
           </div>
 
           <div className="global-search-shell">
@@ -2628,6 +2657,19 @@ const saveMessage: React.CSSProperties = {
   color: '#0b7d38',
   fontSize: 13,
   fontWeight: 700,
+}
+
+const progressBarShell: React.CSSProperties = {
+  height: 4,
+  background: 'transparent',
+  overflow: 'hidden',
+}
+
+const progressBar: React.CSSProperties = {
+  height: '100%',
+  background: '#c51e2d',
+  transition: 'width 180ms ease, opacity 180ms ease',
+  boxShadow: '0 0 10px rgba(197,30,45,0.28)',
 }
 
 const primaryButton: React.CSSProperties = {

@@ -582,7 +582,7 @@ export default function PlayerPage() {
   }, [playerId, tab, reloadKey])
 
   if (!player && !errorMessage) {
-    return <div style={{ padding: 24 }}>Loading...</div>
+    return <div style={{ minHeight: '40vh' }} />
   }
 
   if (!player) {

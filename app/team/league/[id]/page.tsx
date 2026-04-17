@@ -114,7 +114,7 @@ export default function LeagueTeamsPage() {
   }, [identifier])
 
   if (isLoading) {
-    return <div style={pageWrap}>Loading...</div>
+    return <div style={pageWrap} />
   }
 
   if (!league) {

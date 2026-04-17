@@ -565,7 +565,7 @@ export default function TeamPage() {
   }, [id])
 
   if (!team && !errorMessage) {
-    return <div style={{ padding: 24 }}>Loading...</div>
+    return <div style={{ minHeight: '40vh' }} />
   }
 
   if (!team) {

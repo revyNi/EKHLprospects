@@ -476,7 +476,7 @@ export default function LeagueDetailPage() {
   }, [identifier])
 
   if (isLoading) {
-    return <div style={pageWrap}>Loading...</div>
+    return <div style={pageWrap} />
   }
 
   if (!league) {
