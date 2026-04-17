@@ -44,6 +44,8 @@ type StandingRecord = {
   league_id?: string | null
   team_id?: string | null
   season_id?: string | null
+  division?: string | null
+  standing_tag?: string | null
   rank?: number | null
   gp?: number | null
   wins?: number | null
@@ -339,7 +341,7 @@ export default function LeagueDetailPage() {
           .order('name', { ascending: true }),
         supabase
           .from('league_standings')
-          .select('id, league_id, team_id, season_id, rank, gp, wins, losses, overtime_losses, regulation_wins, points, goals_for, goals_against, goal_difference, sogf, soga, shot_percentage')
+          .select('id, league_id, team_id, season_id, division, standing_tag, rank, gp, wins, losses, overtime_losses, regulation_wins, points, goals_for, goals_against, goal_difference, sogf, soga, shot_percentage')
           .eq('league_id', leagueRecord.id)
           .order('rank', { ascending: true }),
         supabase
@@ -475,6 +477,16 @@ export default function LeagueDetailPage() {
   const filteredStandings = selectedStandingSeasonId
     ? standings.filter((standing) => String(standing.season_id) === String(selectedStandingSeasonId))
     : standings
+  const groupedStandings = Object.entries(
+    filteredStandings.reduce<Record<string, StandingRecord[]>>((acc, standing) => {
+      const divisionName = (standing.division || '').trim() || 'Standings'
+      if (!acc[divisionName]) {
+        acc[divisionName] = []
+      }
+      acc[divisionName].push(standing)
+      return acc
+    }, {})
+  )
   const filteredMatches = selectedStandingSeasonId
     ? leagueMatches.filter((match) => String(match.season_id) === String(selectedStandingSeasonId))
     : leagueMatches
@@ -740,39 +752,53 @@ export default function LeagueDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredStandings.map((standing, index) => {
-                  const team = standing.team_id ? teamsById.get(standing.team_id) : null
-                  const goalDifference =
-                    standing.goal_difference ??
-                    (Number(standing.goals_for) || 0) - (Number(standing.goals_against) || 0)
-
-                  return (
-                    <tr key={standing.id} style={index % 2 === 0 ? standingRowAlt : standingRow}>
-                      <td style={standingRankTd}>{standing.rank || index + 1}.</td>
-                      <td style={standingTeamTd}>
-                        {team ? (
-                          <Link href={`/team/${team.id}`} style={teamLink}>
-                            {team.logo_url ? <img src={team.logo_url} alt={team.name} style={teamLogo} /> : null}
-                            <span>{team.name}</span>
-                          </Link>
-                        ) : (
-                          <span>Team not linked</span>
-                        )}
-                      </td>
-                      <td style={standingStatTd}>{standing.gp || 0}</td>
-                      <td style={standingStatTd}>{standing.wins || 0}</td>
-                      <td style={standingStatTd}>{standing.losses || 0}</td>
-                      <td style={standingStatTd}>{standing.overtime_losses || 0}</td>
-                      <td style={standingStatTd}>{standing.regulation_wins || 0}</td>
-                      <td style={standingPtsTd}>{standing.points || 0}</td>
-                      <td style={standingStatTd}>{standing.goals_for || 0}</td>
-                      <td style={standingStatTd}>{standing.goals_against || 0}</td>
-                      <td style={standingStatTd}>{goalDifference}</td>
-                      <td style={standingStatTd}>{standing.sogf || 0}</td>
-                      <td style={standingStatTd}>{standing.soga || 0}</td>
-                      <td style={standingStatTd}>{standing.shot_percentage ?? '-'}</td>
-                    </tr>
+                {groupedStandings.flatMap(([divisionName, divisionRows]) => {
+                  const orderedRows = [...divisionRows].sort(
+                    (a, b) => (Number(a.rank) || 999) - (Number(b.rank) || 999)
                   )
+
+                  return [
+                    <tr key={`division-${divisionName}`} style={divisionRow}>
+                      <td colSpan={14} style={divisionCell}>
+                        {divisionName.toUpperCase()}
+                      </td>
+                    </tr>,
+                    ...orderedRows.map((standing, index) => {
+                      const team = standing.team_id ? teamsById.get(standing.team_id) : null
+                      const goalDifference =
+                        standing.goal_difference ??
+                        (Number(standing.goals_for) || 0) - (Number(standing.goals_against) || 0)
+
+                      return (
+                        <tr key={standing.id} style={index % 2 === 0 ? standingRowAlt : standingRow}>
+                          <td style={standingRankTd}>{standing.rank || index + 1}.</td>
+                          <td style={standingTeamTd}>
+                            {team ? (
+                              <Link href={`/team/${team.id}`} style={teamLink}>
+                                {team.logo_url ? <img src={team.logo_url} alt={team.name} style={teamLogo} /> : null}
+                                {standing.standing_tag ? <span style={standingTag}>{standing.standing_tag}</span> : null}
+                                <span>{team.name}</span>
+                              </Link>
+                            ) : (
+                              <span>Team not linked</span>
+                            )}
+                          </td>
+                          <td style={standingStatTd}>{standing.gp || 0}</td>
+                          <td style={standingStatTd}>{standing.wins || 0}</td>
+                          <td style={standingStatTd}>{standing.losses || 0}</td>
+                          <td style={standingStatTd}>{standing.overtime_losses || 0}</td>
+                          <td style={standingStatTd}>{standing.regulation_wins || 0}</td>
+                          <td style={standingPtsTd}>{standing.points || 0}</td>
+                          <td style={standingStatTd}>{standing.goals_for || 0}</td>
+                          <td style={standingStatTd}>{standing.goals_against || 0}</td>
+                          <td style={standingStatTd}>{goalDifference}</td>
+                          <td style={standingStatTd}>{standing.sogf || 0}</td>
+                          <td style={standingStatTd}>{standing.soga || 0}</td>
+                          <td style={standingStatTd}>{standing.shot_percentage ?? '-'}</td>
+                        </tr>
+                      )
+                    }),
+                  ]
                 })}
 
                 {filteredStandings.length === 0 ? (
@@ -1746,6 +1772,10 @@ const standingRowAlt = {
   background: '#e8ebef',
 }
 
+const divisionRow = {
+  background: '#d7e7f0',
+}
+
 const standingRankTd = {
   padding: '7px 8px',
   color: '#1f3445',
@@ -1767,6 +1797,28 @@ const standingPtsTd = {
   ...standingStatTd,
   background: '#cfd5db',
   fontWeight: 700,
+}
+
+const divisionCell = {
+  padding: '8px 12px',
+  color: '#123f58',
+  fontSize: 12,
+  fontWeight: 800,
+}
+
+const standingTag = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: 18,
+  height: 18,
+  padding: '0 5px',
+  borderRadius: 999,
+  background: '#e8f2ea',
+  color: '#1c6b36',
+  fontSize: 10,
+  fontWeight: 800,
+  textTransform: 'uppercase' as const,
 }
 
 const standingPrimaryTd = {

@@ -68,6 +68,18 @@ type TeamStatRecord = {
   game_type?: string | null
 }
 
+type TeamMatchRecord = {
+  id: string
+  season_id?: string | null
+  match_date?: string | null
+  home_team_id?: string | null
+  visiting_team_id?: string | null
+  home_score?: number | null
+  visiting_score?: number | null
+  score_note?: string | null
+  status?: string | null
+}
+
 type RosterEntry = PlayerRecord & {
   seasonName: string
 }
@@ -126,14 +138,6 @@ type FranchiseSeasonStat = FranchiseStat & {
 
 type FranchiseRankKey = 'gp' | 'goals' | 'assists' | 'points' | 'hits' | 'ppg'
 type FranchiseGoalieRankKey = 'saves' | 'shutouts' | 'savePct'
-
-const recentForm = [
-  { result: 'W 1-0', date: 'Mar 27' },
-  { result: 'W 6-2', date: 'Apr 3' },
-  { result: 'L 1-2', date: 'Apr 4' },
-  { result: '19:15', date: 'Apr 7' },
-  { result: '17:45', date: 'Apr 8' },
-]
 
 const countryNameToCode: Record<string, string> = {
   sweden: 'SE',
@@ -228,6 +232,43 @@ function formatSavePct(saves: number, shotsAgainst: number, savedPct?: number | 
   return (saves / shotsAgainst).toFixed(3)
 }
 
+function hasFinalScore(match: TeamMatchRecord) {
+  return (
+    match.home_score !== null &&
+    match.home_score !== undefined &&
+    match.visiting_score !== null &&
+    match.visiting_score !== undefined
+  )
+}
+
+function normalizeMatchStatus(match: TeamMatchRecord) {
+  const normalized = (match.status || '').trim().toLowerCase()
+  if (normalized) return normalized
+  return hasFinalScore(match) ? 'final' : 'scheduled'
+}
+
+function formatHeroMatchDate(value?: string | null) {
+  if (!value) return '-'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+
+  return parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
+function formatHeroMatchTime(value?: string | null) {
+  if (!value) return '--:--'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+
+  return parsed.toLocaleTimeString('cs-CZ', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 function mergePlayersById(...groups: PlayerRecord[][]) {
   const merged = new Map<string, PlayerRecord>()
 
@@ -252,6 +293,8 @@ export default function TeamPage() {
   const [teamPlayers, setTeamPlayers] = useState<PlayerRecord[]>([])
   const [franchisePlayers, setFranchisePlayers] = useState<PlayerRecord[]>([])
   const [experienceTeams, setExperienceTeams] = useState<TeamRecord[]>([])
+  const [matchTeams, setMatchTeams] = useState<TeamRecord[]>([])
+  const [teamMatches, setTeamMatches] = useState<TeamMatchRecord[]>([])
   const [leagueRecords, setLeagueRecords] = useState<LeagueRecord[]>([])
   const [seasonOptions, setSeasonOptions] = useState<SeasonRecord[]>([])
   const [selectedSeasonId, setSelectedSeasonId] = useState('')
@@ -270,6 +313,7 @@ export default function TeamPage() {
         { data: teamData, error: teamError },
         { data: teamStats, error: statsError },
         { data: seasonsData, error: seasonsError },
+        { data: matchesData, error: matchesError },
       ] = await Promise.all([
         supabase.from('teams').select('*').eq('id', id).single(),
         supabase
@@ -277,10 +321,14 @@ export default function TeamPage() {
           .select('id, player_id, team_id, season_id, gp, goals, assists, points, hits, plus_minus, shots, toi, gk_saves, gk_shots_against, gk_percentage, goalie_wins, goalie_losses, goalie_overtime_losses, goalie_shutouts, goalie_goals_against, game_type')
           .eq('team_id', id),
         supabase.from('seasons').select('id, name'),
+        supabase
+          .from('league_matches')
+          .select('id, season_id, match_date, home_team_id, visiting_team_id, home_score, visiting_score, score_note, status')
+          .or(`home_team_id.eq.${id},visiting_team_id.eq.${id}`),
       ])
 
-      if (teamError || statsError || seasonsError) {
-        setErrorMessage(teamError?.message || statsError?.message || seasonsError?.message || 'Unable to load team page.')
+      if (teamError || statsError || seasonsError || matchesError) {
+        setErrorMessage(teamError?.message || statsError?.message || seasonsError?.message || matchesError?.message || 'Unable to load team page.')
         setTeam(null)
         setRoster([])
         setRawStats([])
@@ -288,6 +336,8 @@ export default function TeamPage() {
         setTeamPlayers([])
         setFranchisePlayers([])
         setExperienceTeams([])
+        setMatchTeams([])
+        setTeamMatches([])
         setLeagueRecords([])
         setSeasonOptions([])
         return
@@ -296,6 +346,11 @@ export default function TeamPage() {
       setTeam((teamData as TeamRecord) || null)
 
       const statsRows = (teamStats as TeamStatRecord[]) || []
+      const matchRows = ((matchesData as TeamMatchRecord[]) || []).sort((a, b) => {
+        const aTime = a.match_date ? new Date(a.match_date).getTime() : 0
+        const bTime = b.match_date ? new Date(b.match_date).getTime() : 0
+        return bTime - aTime
+      })
       const seasonRows = (seasonsData as SeasonRecord[]) || []
       const usedSeasonIds = Array.from(
         new Set(statsRows.map((row) => row.season_id).filter(Boolean))
@@ -303,6 +358,7 @@ export default function TeamPage() {
       const availableSeasons = seasonRows.filter((season) => usedSeasonIds.includes(season.id))
 
       setSeasonOptions(availableSeasons)
+      setTeamMatches(matchRows)
 
       const defaultSeasonId =
         availableSeasons[availableSeasons.length - 1]?.id || availableSeasons[0]?.id || ''
@@ -331,6 +387,21 @@ export default function TeamPage() {
         .select('id, name, abbreviation, short_name, display_name, country_code')
 
       setLeagueRecords((leaguesData as LeagueRecord[]) || [])
+
+      const matchTeamIds = Array.from(
+        new Set(matchRows.flatMap((match) => [match.home_team_id, match.visiting_team_id]).filter(Boolean))
+      ) as string[]
+
+      if (matchTeamIds.length) {
+        const { data: matchTeamsData } = await supabase
+          .from('teams')
+          .select('id, name, logo_url, country, country_code, league')
+          .in('id', matchTeamIds)
+
+        setMatchTeams((matchTeamsData as TeamRecord[]) || [])
+      } else {
+        setMatchTeams([])
+      }
 
       async function loadCareerExperience(players: PlayerRecord[]) {
         const playerIds = players.map((player) => player.id).filter(Boolean)
@@ -502,6 +573,7 @@ export default function TeamPage() {
   }
 
   const flagUrl = getFlagUrl(team.country, team.country_code)
+  const matchTeamsById = new Map(matchTeams.map((entry) => [String(entry.id), entry]))
   const filteredRoster = selectedSeasonId
     ? roster.filter((entry) => {
         const season = seasonOptions.find((item) => item.id === selectedSeasonId)
@@ -515,6 +587,25 @@ export default function TeamPage() {
   const currentSeasonName =
     seasonOptions.find((season) => season.id === selectedSeasonId)?.name || 'Current'
   const teamStatsPageHref = `/team/${encodeURIComponent(team.id)}/stats`
+  const finishedHeroMatches = [...teamMatches]
+    .filter((match) => normalizeMatchStatus(match) === 'final')
+    .sort((a, b) => {
+      const aTime = a.match_date ? new Date(a.match_date).getTime() : 0
+      const bTime = b.match_date ? new Date(b.match_date).getTime() : 0
+      return bTime - aTime
+    })
+  const upcomingHeroMatches = [...teamMatches]
+    .filter((match) => normalizeMatchStatus(match) !== 'final')
+    .sort((a, b) => {
+      const aTime = a.match_date ? new Date(a.match_date).getTime() : Number.MAX_SAFE_INTEGER
+      const bTime = b.match_date ? new Date(b.match_date).getTime() : Number.MAX_SAFE_INTEGER
+      return aTime - bTime
+    })
+  const heroMatches = [
+    ...finishedHeroMatches.slice(0, 3),
+    ...upcomingHeroMatches.slice(0, 2),
+    ...((upcomingHeroMatches.length < 2 ? finishedHeroMatches.slice(3, 5) : []).slice(0, 2 - Math.min(upcomingHeroMatches.length, 2))),
+  ].slice(0, 5)
   const nationalityRows = Object.values(
     filteredRoster.reduce<Record<string, { code: string; count: number }>>((acc, player) => {
       const code = (player.nationality || 'Unknown').trim().toUpperCase()
@@ -789,19 +880,50 @@ export default function TeamPage() {
 
           <div style={rightRail}>
             <div style={formCard}>
-              {recentForm.map((item, index) => (
-                <div key={`${item.result}-${item.date}-${index}`} style={formItem}>
-                  <div style={formBadge}>
-                    {team.logo_url ? (
-                      <img src={team.logo_url} alt={team.name} style={miniLogo} />
-                    ) : (
-                      <span style={miniLogoFallback}>T</span>
-                    )}
+              {heroMatches.map((match, index) => {
+                const isHome = String(match.home_team_id) === String(team.id)
+                const opponentId = isHome ? match.visiting_team_id : match.home_team_id
+                const opponent = opponentId ? matchTeamsById.get(String(opponentId)) : null
+                const teamScore = isHome ? Number(match.home_score) || 0 : Number(match.visiting_score) || 0
+                const opponentScore = isHome ? Number(match.visiting_score) || 0 : Number(match.home_score) || 0
+                const isFinal = normalizeMatchStatus(match) === 'final'
+                const resultStyle = isFinal
+                  ? teamScore > opponentScore
+                    ? resultPillWin
+                    : teamScore < opponentScore
+                      ? resultPillLoss
+                      : resultPillNeutral
+                  : resultPillUpcoming
+                const resultLabel = isFinal
+                  ? `${teamScore > opponentScore ? 'W' : teamScore < opponentScore ? 'L' : 'T'} ${teamScore}-${opponentScore}`
+                  : formatHeroMatchTime(match.match_date)
+
+                return (
+                  <div key={`${match.id}-${index}`} style={formItem}>
+                    <div style={resultStyle}>
+                      {isFinal ? (
+                        <>
+                          <span style={teamScore > opponentScore ? resultLetterWin : teamScore < opponentScore ? resultLetterLoss : resultLetterNeutral}>
+                            {teamScore > opponentScore ? 'W' : teamScore < opponentScore ? 'L' : 'T'}
+                          </span>
+                          <span>{` ${teamScore}-${opponentScore}`}</span>
+                        </>
+                      ) : (
+                        <span>{resultLabel}</span>
+                      )}
+                    </div>
+                    <div style={formBadge}>
+                      {opponent?.logo_url ? (
+                        <img src={opponent.logo_url} alt={opponent.name} style={miniLogo} />
+                      ) : (
+                        <span style={miniLogoFallback}>{opponent?.name?.charAt(0) || 'T'}</span>
+                      )}
+                    </div>
+                    <div style={formDate}>{formatHeroMatchDate(match.match_date)}</div>
                   </div>
-                  <div style={resultPill}>{item.result}</div>
-                  <div style={formDate}>{item.date}</div>
-                </div>
-              ))}
+                )
+              })}
+              {!heroMatches.length ? <div style={noHeroMatches}>No games added yet.</div> : null}
             </div>
           </div>
         </div>
@@ -1724,15 +1846,67 @@ const miniLogoFallback = {
 }
 
 const resultPill = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: 48,
+  height: 22,
+  padding: '0 10px',
+  borderRadius: 999,
   fontSize: 10,
-  fontWeight: 700,
+  fontWeight: 800,
   color: 'white',
   marginBottom: 4,
+  background: '#0d2738',
+}
+
+const resultPillWin = {
+  ...resultPill,
+  background: '#0d5c44',
+}
+
+const resultPillLoss = {
+  ...resultPill,
+  background: '#10283a',
+}
+
+const resultPillNeutral = {
+  ...resultPill,
+  background: '#355467',
+}
+
+const resultPillUpcoming = {
+  ...resultPill,
+  background: '#0d2738',
+}
+
+const resultLetterWin = {
+  color: '#4ade80',
+  marginRight: 4,
+}
+
+const resultLetterLoss = {
+  color: '#f87171',
+  marginRight: 4,
+}
+
+const resultLetterNeutral = {
+  color: '#dbe7ef',
+  marginRight: 4,
 }
 
 const formDate = {
   fontSize: 10,
   color: '#cfe1eb',
+}
+
+const noHeroMatches = {
+  gridColumn: '1 / -1',
+  padding: '14px 10px',
+  textAlign: 'center' as const,
+  color: '#cfe1eb',
+  fontSize: 12,
+  fontWeight: 700,
 }
 
 const rosterCard = {

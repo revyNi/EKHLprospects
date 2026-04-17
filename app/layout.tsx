@@ -144,6 +144,8 @@ type AdminTeamForm = {
 type AdminStandingRowForm = {
   id?: string
   team_id: string
+  division: string
+  standing_tag: string
   rank: string
   gp: string
   wins: string
@@ -260,6 +262,8 @@ const emptyTeamForm = (): AdminTeamForm => ({
 
 const emptyStandingRow = (): AdminStandingRowForm => ({
   team_id: '',
+  division: '',
+  standing_tag: '',
   rank: '',
   gp: '',
   wins: '',
@@ -459,7 +463,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
       const { data, error } = await supabase
         .from('league_standings')
-        .select('id, team_id, rank, gp, wins, losses, overtime_losses, regulation_wins, points, goals_for, goals_against, goal_difference, sogf, soga, shot_percentage')
+        .select('id, team_id, division, standing_tag, rank, gp, wins, losses, overtime_losses, regulation_wins, points, goals_for, goals_against, goal_difference, sogf, soga, shot_percentage')
         .eq('league_id', standingsForm.league_id)
         .eq('season_id', standingsForm.season_id)
         .order('rank', { ascending: true })
@@ -473,6 +477,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       const loadedRows = ((data as Record<string, unknown>[]) || []).map((row) => ({
         id: String(row.id || ''),
         team_id: String(row.team_id || ''),
+        division: String(row.division || ''),
+        standing_tag: String(row.standing_tag || ''),
         rank: row.rank === null || row.rank === undefined ? '' : String(row.rank),
         gp: row.gp === null || row.gp === undefined ? '' : String(row.gp),
         wins: row.wins === null || row.wins === undefined ? '' : String(row.wins),
@@ -1071,6 +1077,8 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
         league_id: standingsForm.league_id,
         season_id: standingsForm.season_id,
         team_id: row.team_id,
+        division: row.division.trim() || null,
+        standing_tag: row.standing_tag.trim() || null,
         rank: toNullableNumber(row.rank),
         gp: toNullableNumber(row.gp),
         wins: toNullableNumber(row.wins),
@@ -1866,6 +1874,8 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                               ))}
                             </select>
                           </label>
+                          <label style={fieldWrap}><span style={fieldLabel}>Division</span><input value={row.division} onChange={(event) => updateStandingsRow(index, 'division', event.target.value)} placeholder="East, West, Atlantic..." style={fieldInput} /></label>
+                          <label style={fieldWrap}><span style={fieldLabel}>Standing Tag</span><input value={row.standing_tag} onChange={(event) => updateStandingsRow(index, 'standing_tag', event.target.value)} placeholder="y, x, z..." style={fieldInput} /></label>
                           <label style={fieldWrap}><span style={fieldLabel}>Rank</span><input value={row.rank} onChange={(event) => updateStandingsRow(index, 'rank', event.target.value)} style={fieldInput} /></label>
                           <label style={fieldWrap}><span style={fieldLabel}>GP</span><input value={row.gp} onChange={(event) => updateStandingsRow(index, 'gp', event.target.value)} style={fieldInput} /></label>
                           <label style={fieldWrap}><span style={fieldLabel}>Wins</span><input value={row.wins} onChange={(event) => updateStandingsRow(index, 'wins', event.target.value)} style={fieldInput} /></label>
