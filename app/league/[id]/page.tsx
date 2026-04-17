@@ -227,12 +227,44 @@ function formatGaa(goalsAgainst: number, gp: number) {
   return (goalsAgainst / gp).toFixed(2)
 }
 
+function getStandingSortValue(standing: StandingRecord) {
+  return {
+    points: Number(standing.points) || 0,
+    goalDifference:
+      standing.goal_difference !== null && standing.goal_difference !== undefined
+        ? Number(standing.goal_difference) || 0
+        : (Number(standing.goals_for) || 0) - (Number(standing.goals_against) || 0),
+    goalsFor: Number(standing.goals_for) || 0,
+    wins: Number(standing.wins) || 0,
+    regulationWins: Number(standing.regulation_wins) || 0,
+    rank: Number(standing.rank) || 999,
+  }
+}
+
+function sortStandingsRows(rows: StandingRecord[]) {
+  return [...rows].sort((a, b) => {
+    const left = getStandingSortValue(a)
+    const right = getStandingSortValue(b)
+
+    return (
+      right.points - left.points ||
+      right.goalDifference - left.goalDifference ||
+      right.goalsFor - left.goalsFor ||
+      right.wins - left.wins ||
+      right.regulationWins - left.regulationWins ||
+      left.rank - right.rank
+    )
+  })
+}
+
 const standingTagLegend: Record<string, string> = {
   p: 'Clinched Presidents Trophy',
   y: 'Clinched Conference',
   x: 'Clinched Playoffs',
   e: 'Eliminated from Playoffs',
 }
+
+const standingTagOrder = ['p', 'y', 'x', 'e']
 
 function normalizeMatchStatus(status?: string | null, match?: MatchRecord) {
   const normalized = (status || '').trim().toLowerCase()
@@ -492,18 +524,12 @@ export default function LeagueDetailPage() {
         .filter((value) => value.length > 0)
     )
   ).sort((a, b) => a.localeCompare(b))
+  const hasStandingDivisions = standingDivisionOptions.length > 1
   const effectiveStandingDivision =
-    selectedStandingDivision !== 'all' && !standingDivisionOptions.includes(selectedStandingDivision)
-      ? 'all'
-      : selectedStandingDivision
-  const selectedDivisionStandings =
-    effectiveStandingDivision === 'all'
-      ? filteredStandings
-      : filteredStandings.filter(
-          (standing) => (standing.division || '').trim() === effectiveStandingDivision
-        )
+    selectedStandingDivision === 'divisions' && hasStandingDivisions ? 'divisions' : 'all'
+  const orderedFullStandings = sortStandingsRows(filteredStandings)
   const groupedStandings = Object.entries(
-    selectedDivisionStandings.reduce<Record<string, StandingRecord[]>>((acc, standing) => {
+    filteredStandings.reduce<Record<string, StandingRecord[]>>((acc, standing) => {
       const divisionName = (standing.division || '').trim() || 'Standings'
       if (!acc[divisionName]) {
         acc[divisionName] = []
@@ -514,12 +540,12 @@ export default function LeagueDetailPage() {
   )
   const visibleStandingLegend = Array.from(
     new Set(
-      selectedDivisionStandings
+      filteredStandings
         .map((standing) => (standing.standing_tag || '').trim().toLowerCase())
         .filter((tag) => tag && standingTagLegend[tag])
     )
   )
-    .sort((a, b) => a.localeCompare(b))
+    .sort((a, b) => standingTagOrder.indexOf(a) - standingTagOrder.indexOf(b))
     .map((tag) => ({
       tag,
       label: standingTagLegend[tag],
@@ -762,18 +788,14 @@ export default function LeagueDetailPage() {
                 </option>
               ))}
             </select>
-            {standingDivisionOptions.length ? (
+            {hasStandingDivisions ? (
               <select
                 value={effectiveStandingDivision}
                 onChange={(event) => setSelectedStandingDivision(event.target.value)}
                 style={standingSeasonSelect}
               >
                 <option value="all">Full League</option>
-                {standingDivisionOptions.map((division) => (
-                  <option key={division} value={division}>
-                    {division}
-                  </option>
-                ))}
+                <option value="divisions">Divisions</option>
               </select>
             ) : null}
             <button
@@ -806,18 +828,54 @@ export default function LeagueDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {groupedStandings.flatMap(([divisionName, divisionRows]) => {
-                  const orderedRows = [...divisionRows].sort(
-                    (a, b) => (Number(a.rank) || 999) - (Number(b.rank) || 999)
-                  )
+                {effectiveStandingDivision === 'divisions'
+                  ? groupedStandings.flatMap(([divisionName, divisionRows]) => {
+                      const orderedRows = sortStandingsRows(divisionRows)
 
-                  return [
-                    <tr key={`division-${divisionName}`} style={divisionRow}>
-                      <td colSpan={14} style={divisionCell}>
-                        {divisionName.toUpperCase()}
-                      </td>
-                    </tr>,
-                    ...orderedRows.map((standing, index) => {
+                      return [
+                        <tr key={`division-${divisionName}`} style={divisionRow}>
+                          <td colSpan={14} style={divisionCell}>
+                            {divisionName.toUpperCase()}
+                          </td>
+                        </tr>,
+                        ...orderedRows.map((standing, index) => {
+                          const team = standing.team_id ? teamsById.get(standing.team_id) : null
+                          const goalDifference =
+                            standing.goal_difference ??
+                            (Number(standing.goals_for) || 0) - (Number(standing.goals_against) || 0)
+
+                          return (
+                            <tr key={standing.id} style={index % 2 === 0 ? standingRowAlt : standingRow}>
+                              <td style={standingRankTd}>{index + 1}.</td>
+                              <td style={standingTeamTd}>
+                                {team ? (
+                                  <Link href={`/team/${team.id}`} style={teamLink}>
+                                    {team.logo_url ? <img src={team.logo_url} alt={team.name} style={teamLogo} /> : null}
+                                    {standing.standing_tag ? <span style={standingTag}>{standing.standing_tag}</span> : null}
+                                    <span>{team.name}</span>
+                                  </Link>
+                                ) : (
+                                  <span>Team not linked</span>
+                                )}
+                              </td>
+                              <td style={standingStatTd}>{standing.gp || 0}</td>
+                              <td style={standingStatTd}>{standing.wins || 0}</td>
+                              <td style={standingStatTd}>{standing.losses || 0}</td>
+                              <td style={standingStatTd}>{standing.overtime_losses || 0}</td>
+                              <td style={standingStatTd}>{standing.regulation_wins || 0}</td>
+                              <td style={standingPtsTd}>{standing.points || 0}</td>
+                              <td style={standingStatTd}>{standing.goals_for || 0}</td>
+                              <td style={standingStatTd}>{standing.goals_against || 0}</td>
+                              <td style={standingStatTd}>{goalDifference}</td>
+                              <td style={standingStatTd}>{standing.sogf || 0}</td>
+                              <td style={standingStatTd}>{standing.soga || 0}</td>
+                              <td style={standingStatTd}>{standing.shot_percentage ?? '-'}</td>
+                            </tr>
+                          )
+                        }),
+                      ]
+                    })
+                  : orderedFullStandings.map((standing, index) => {
                       const team = standing.team_id ? teamsById.get(standing.team_id) : null
                       const goalDifference =
                         standing.goal_difference ??
@@ -825,7 +883,7 @@ export default function LeagueDetailPage() {
 
                       return (
                         <tr key={standing.id} style={index % 2 === 0 ? standingRowAlt : standingRow}>
-                          <td style={standingRankTd}>{standing.rank || index + 1}.</td>
+                          <td style={standingRankTd}>{index + 1}.</td>
                           <td style={standingTeamTd}>
                             {team ? (
                               <Link href={`/team/${team.id}`} style={teamLink}>
@@ -851,9 +909,7 @@ export default function LeagueDetailPage() {
                           <td style={standingStatTd}>{standing.shot_percentage ?? '-'}</td>
                         </tr>
                       )
-                    }),
-                  ]
-                })}
+                    })}
 
                 {filteredStandings.length === 0 ? (
                   <tr style={standingRow}>
