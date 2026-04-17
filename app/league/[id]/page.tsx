@@ -227,6 +227,13 @@ function formatGaa(goalsAgainst: number, gp: number) {
   return (goalsAgainst / gp).toFixed(2)
 }
 
+const standingTagLegend: Record<string, string> = {
+  p: 'Clinched Presidents Trophy',
+  y: 'Clinched Conference',
+  x: 'Clinched Playoffs',
+  e: 'Eliminated from Playoffs',
+}
+
 function normalizeMatchStatus(status?: string | null, match?: MatchRecord) {
   const normalized = (status || '').trim().toLowerCase()
   if (normalized) return normalized
@@ -267,6 +274,7 @@ export default function LeagueDetailPage() {
   const [allSeasons, setAllSeasons] = useState<SeasonRecord[]>([])
   const [standingSeasons, setStandingSeasons] = useState<SeasonRecord[]>([])
   const [selectedStandingSeasonId, setSelectedStandingSeasonId] = useState('')
+  const [selectedStandingDivision, setSelectedStandingDivision] = useState('all')
   const [allTimeGameType, setAllTimeGameType] = useState<'regular' | 'playoffs'>('regular')
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
@@ -477,8 +485,25 @@ export default function LeagueDetailPage() {
   const filteredStandings = selectedStandingSeasonId
     ? standings.filter((standing) => String(standing.season_id) === String(selectedStandingSeasonId))
     : standings
+  const standingDivisionOptions = Array.from(
+    new Set(
+      filteredStandings
+        .map((standing) => (standing.division || '').trim())
+        .filter((value) => value.length > 0)
+    )
+  ).sort((a, b) => a.localeCompare(b))
+  const effectiveStandingDivision =
+    selectedStandingDivision !== 'all' && !standingDivisionOptions.includes(selectedStandingDivision)
+      ? 'all'
+      : selectedStandingDivision
+  const selectedDivisionStandings =
+    effectiveStandingDivision === 'all'
+      ? filteredStandings
+      : filteredStandings.filter(
+          (standing) => (standing.division || '').trim() === effectiveStandingDivision
+        )
   const groupedStandings = Object.entries(
-    filteredStandings.reduce<Record<string, StandingRecord[]>>((acc, standing) => {
+    selectedDivisionStandings.reduce<Record<string, StandingRecord[]>>((acc, standing) => {
       const divisionName = (standing.division || '').trim() || 'Standings'
       if (!acc[divisionName]) {
         acc[divisionName] = []
@@ -487,6 +512,18 @@ export default function LeagueDetailPage() {
       return acc
     }, {})
   )
+  const visibleStandingLegend = Array.from(
+    new Set(
+      selectedDivisionStandings
+        .map((standing) => (standing.standing_tag || '').trim().toLowerCase())
+        .filter((tag) => tag && standingTagLegend[tag])
+    )
+  )
+    .sort((a, b) => a.localeCompare(b))
+    .map((tag) => ({
+      tag,
+      label: standingTagLegend[tag],
+    }))
   const filteredMatches = selectedStandingSeasonId
     ? leagueMatches.filter((match) => String(match.season_id) === String(selectedStandingSeasonId))
     : leagueMatches
@@ -713,7 +750,10 @@ export default function LeagueDetailPage() {
             </button>
             <select
               value={selectedStandingSeasonId}
-              onChange={(event) => setSelectedStandingSeasonId(event.target.value)}
+              onChange={(event) => {
+                setSelectedStandingSeasonId(event.target.value)
+                setSelectedStandingDivision('all')
+              }}
               style={standingSeasonSelect}
             >
               {standingSeasons.map((season) => (
@@ -722,6 +762,20 @@ export default function LeagueDetailPage() {
                 </option>
               ))}
             </select>
+            {standingDivisionOptions.length ? (
+              <select
+                value={effectiveStandingDivision}
+                onChange={(event) => setSelectedStandingDivision(event.target.value)}
+                style={standingSeasonSelect}
+              >
+                <option value="all">Full League</option>
+                {standingDivisionOptions.map((division) => (
+                  <option key={division} value={division}>
+                    {division}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             <button
               type="button"
               onClick={() => goToStandingSeason('next')}
@@ -811,6 +865,16 @@ export default function LeagueDetailPage() {
               </tbody>
             </table>
           </div>
+          {visibleStandingLegend.length ? (
+            <div style={standingLegendWrap}>
+              {visibleStandingLegend.map((entry) => (
+                <div key={entry.tag} style={standingLegendRow}>
+                  <div style={standingLegendTag}>{entry.tag.toUpperCase()}</div>
+                  <div style={standingLegendText}>{entry.label}</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div style={leaderboardGrid}>
@@ -1819,6 +1883,32 @@ const standingTag = {
   fontSize: 10,
   fontWeight: 800,
   textTransform: 'uppercase' as const,
+}
+
+const standingLegendWrap = {
+  borderTop: '1px solid #d7e0e8',
+  background: '#fff',
+}
+
+const standingLegendRow = {
+  display: 'grid',
+  gridTemplateColumns: '42px 1fr',
+  borderTop: '1px solid #e5ebf0',
+}
+
+const standingLegendTag = {
+  padding: '6px 10px',
+  color: '#c51e2d',
+  fontSize: 18,
+  fontWeight: 800,
+  fontStyle: 'italic',
+  textAlign: 'center' as const,
+}
+
+const standingLegendText = {
+  padding: '8px 12px',
+  color: '#1f3445',
+  fontSize: 13,
 }
 
 const standingPrimaryTd = {
