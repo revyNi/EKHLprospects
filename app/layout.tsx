@@ -8,7 +8,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
 import { loadAdminStatus } from '../lib/adminClient'
 
-type AdminPanelType = 'player' | 'stats' | 'league' | 'team' | 'standings' | 'match' | null
+type AdminPanelType = 'player' | 'stats' | 'league' | 'team' | 'standings' | 'match' | 'role' | null
 
 type AdminPlayerOption = {
   id: string
@@ -202,6 +202,18 @@ type AdminMatchForm = {
   attendance: string
 }
 
+type AdminRoleRecord = {
+  id: string
+  name: string
+  description?: string | null
+}
+
+type AdminRoleForm = {
+  selected_role_id: string
+  name: string
+  description: string
+}
+
 const pages = [
   { name: 'Home', href: '/' },
   { name: 'Teams', href: '/team' },
@@ -307,6 +319,12 @@ const emptyMatchForm = (): AdminMatchForm => ({
   attendance: '',
 })
 
+const emptyRoleForm = (): AdminRoleForm => ({
+  selected_role_id: '',
+  name: '',
+  description: '',
+})
+
 function toNullableNumber(value: string) {
   return value.trim() ? Number(value) : null
 }
@@ -379,7 +397,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [teamForm, setTeamForm] = useState<AdminTeamForm>(emptyTeamForm)
   const [standingsForm, setStandingsForm] = useState<AdminStandingsForm>(emptyStandingsForm)
   const [matchForm, setMatchForm] = useState<AdminMatchForm>(emptyMatchForm)
+  const [roleForm, setRoleForm] = useState<AdminRoleForm>(emptyRoleForm)
   const [adminMatches, setAdminMatches] = useState<AdminMatchOption[]>([])
+  const [adminRoles, setAdminRoles] = useState<AdminRoleRecord[]>([])
   const [searchValue, setSearchValue] = useState('')
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchPlayers, setSearchPlayers] = useState<SearchPlayerOption[]>([])
@@ -464,6 +484,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         { data: teamsData },
         { data: seasonsData },
         { data: leaguesData },
+        { data: rolesData },
       ] = await Promise.all([
         supabase.from('players').select('id, name').order('name', { ascending: true }),
         supabase.from('teams').select('id, name').order('name', { ascending: true }),
@@ -472,12 +493,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .from('leagues')
           .select('id, name, logo_url')
           .order('name', { ascending: true }),
+        supabase.from('player_roles').select('id, name, description').order('name', { ascending: true }),
       ])
 
       setAdminPlayers((playersData as AdminPlayerOption[]) || [])
       setAdminTeams((teamsData as AdminTeamOption[]) || [])
       setAdminSeasons((seasonsData as AdminSeasonOption[]) || [])
       setAdminLeagues((leaguesData as AdminLeagueOption[]) || [])
+      setAdminRoles((rolesData as AdminRoleRecord[]) || [])
       setAdminIsLoading(false)
     }
 
@@ -663,6 +686,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     if (panel === 'league') setLeagueForm(emptyLeagueForm())
     if (panel === 'team') setTeamForm(emptyTeamForm())
     if (panel === 'standings') setStandingsForm(emptyStandingsForm())
+    if (panel === 'role') setRoleForm(emptyRoleForm())
     if (panel === 'match') {
       setMatchForm(emptyMatchForm())
       setAdminMatches([])
@@ -1295,6 +1319,57 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     setAdminIsSaving(false)
   }
 
+  async function saveRoleForm() {
+    setAdminIsSaving(true)
+    setAdminSaveMessage('')
+
+    const payload = {
+      name: roleForm.name.trim(),
+      description: roleForm.description.trim() || null,
+    }
+
+    if (!payload.name) {
+      setAdminSaveMessage('Role name is required.')
+      setAdminIsSaving(false)
+      return
+    }
+
+    const { data, error } = roleForm.selected_role_id
+      ? await supabase
+          .from('player_roles')
+          .update(payload)
+          .eq('id', roleForm.selected_role_id)
+          .select('id, name, description')
+          .single()
+      : await supabase
+          .from('player_roles')
+          .insert(payload)
+          .select('id, name, description')
+          .single()
+
+    if (error) {
+      setAdminSaveMessage(error.message)
+      setAdminIsSaving(false)
+      return
+    }
+
+    const savedRole = data as AdminRoleRecord | null
+    if (savedRole) {
+      setAdminRoles((current) => {
+        const next = [
+          savedRole,
+          ...current.filter((role) => role.id !== savedRole.id),
+        ]
+
+        return next.sort((a, b) => a.name.localeCompare(b.name))
+      })
+    }
+
+    setAdminSaveMessage(roleForm.selected_role_id ? 'Role updated.' : 'Role added.')
+    setRoleForm(emptyRoleForm())
+    setAdminIsSaving(false)
+  }
+
   return (
     <html lang="en">
       <body style={body}>
@@ -1380,6 +1455,9 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                     </button>
                     <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('team')}>
                       Add Team
+                    </button>
+                    <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('role')}>
+                      Add/Update Player Roles
                     </button>
                     <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('standings')}>
                       Add/Update Standings
@@ -1749,6 +1827,8 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                     ? 'Add Player'
                     : activeAdminPanel === 'stats'
                       ? 'Add Roster/Stats'
+                      : activeAdminPanel === 'role'
+                        ? 'Add/Update Player Roles'
                       : activeAdminPanel === 'standings'
                         ? 'Add/Update Standings'
                       : activeAdminPanel === 'match'
@@ -1922,6 +2002,63 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                     <label style={fieldWrap}><span style={fieldLabel}>Goalie OTL</span><input value={statsForm.goalie_overtime_losses} onChange={(event) => setStatsForm((current) => ({ ...current, goalie_overtime_losses: event.target.value }))} style={fieldInput} /></label>
                     <label style={fieldWrap}><span style={fieldLabel}>Shutouts</span><input value={statsForm.goalie_shutouts} onChange={(event) => setStatsForm((current) => ({ ...current, goalie_shutouts: event.target.value }))} style={fieldInput} /></label>
                     <label style={fieldWrap}><span style={fieldLabel}>Goals Against</span><input value={statsForm.goalie_goals_against} onChange={(event) => setStatsForm((current) => ({ ...current, goalie_goals_against: event.target.value }))} style={fieldInput} /></label>
+                  </div>
+                </div>
+              ) : null}
+
+              {!adminIsLoading && activeAdminPanel === 'role' ? (
+                <div style={modalBody}>
+                  <div style={formGrid}>
+                    <label style={{ ...fieldWrap, gridColumn: '1 / -1' }}>
+                      <span style={fieldLabel}>Existing Role</span>
+                      <select
+                        value={roleForm.selected_role_id}
+                        onChange={(event) => {
+                          const selectedRoleId = event.target.value
+                          const selectedRole = adminRoles.find((role) => role.id === selectedRoleId)
+
+                          if (!selectedRole) {
+                            setRoleForm(emptyRoleForm())
+                            return
+                          }
+
+                          setRoleForm({
+                            selected_role_id: selectedRole.id,
+                            name: selectedRole.name,
+                            description: selectedRole.description || '',
+                          })
+                        }}
+                        style={fieldInput}
+                      >
+                        <option value="">Create new role</option>
+                        {adminRoles.map((role) => (
+                          <option key={role.id} value={role.id}>
+                            {role.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Role Name</span>
+                      <input
+                        value={roleForm.name}
+                        onChange={(event) =>
+                          setRoleForm((current) => ({ ...current, name: event.target.value }))
+                        }
+                        style={fieldInput}
+                      />
+                    </label>
+                    <label style={{ ...fieldWrap, gridColumn: '1 / -1' }}>
+                      <span style={fieldLabel}>Description</span>
+                      <textarea
+                        value={roleForm.description}
+                        onChange={(event) =>
+                          setRoleForm((current) => ({ ...current, description: event.target.value }))
+                        }
+                        style={fieldTextarea}
+                        placeholder="Explain what this player role means."
+                      />
+                    </label>
                   </div>
                 </div>
               ) : null}
@@ -2420,6 +2557,8 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                       ? savePlayerForm
                       : activeAdminPanel === 'stats'
                         ? saveStatsForm
+                        : activeAdminPanel === 'role'
+                          ? saveRoleForm
                         : activeAdminPanel === 'standings'
                           ? saveStandingsForm
                         : activeAdminPanel === 'match'
@@ -2776,6 +2915,18 @@ const fieldInput: React.CSSProperties = {
   fontSize: 14,
   color: '#173650',
   background: '#fff',
+}
+
+const fieldTextarea: React.CSSProperties = {
+  minHeight: 104,
+  border: '1px solid #c4d0db',
+  borderRadius: 6,
+  padding: '10px',
+  fontSize: 14,
+  color: '#173650',
+  background: '#fff',
+  resize: 'vertical',
+  fontFamily: 'inherit',
 }
 
 const modalFooter: React.CSSProperties = {

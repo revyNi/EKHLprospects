@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../lib/supabaseClient'
 import { loadAdminStatus } from '../../../lib/adminClient'
@@ -22,6 +22,17 @@ type LeagueRecord = {
   display_name?: string | null
 }
 
+type PlayerRoleRecord = {
+  id: string
+  name: string
+  description?: string | null
+}
+
+type PlayerRoleAssignmentRecord = {
+  player_id?: string | null
+  role_id?: string | null
+}
+
 type PlayerRecord = {
   id: string
   name: string
@@ -30,6 +41,7 @@ type PlayerRecord = {
   position?: string | null
   nationality?: string | null
   player_type?: string | null
+  player_type_description?: string | null
   image_url?: string | null
   teams?: TeamRecord | TeamRecord[] | null
 }
@@ -379,6 +391,8 @@ export default function PlayerPage() {
 
   const [player, setPlayer] = useState<PlayerRecord | null>(null)
   const [leagues, setLeagues] = useState<LeagueRecord[]>([])
+  const [playerRoles, setPlayerRoles] = useState<PlayerRoleRecord[]>([])
+  const [playerRoleAssignments, setPlayerRoleAssignments] = useState<PlayerRoleAssignmentRecord[]>([])
   const [allStats, setAllStats] = useState<FullStat[]>([])
   const [stats, setStats] = useState<FullStat[]>([])
   const [grouped, setGrouped] = useState<GroupedStat[]>([])
@@ -402,12 +416,14 @@ export default function PlayerPage() {
     position: '',
     nationality: '',
     player_type: '',
+    player_type_description: '',
     image_url: '',
   })
   const [editorStats, setEditorStats] = useState<EditableStatRecord[]>([])
   const [editorAwards, setEditorAwards] = useState<EditableAwardRecord[]>([])
   const [deletedStatIds, setDeletedStatIds] = useState<string[]>([])
   const [deletedAwardIds, setDeletedAwardIds] = useState<string[]>([])
+  const [editorRoleIds, setEditorRoleIds] = useState<string[]>([])
 
   useEffect(() => {
     let isMounted = true
@@ -445,11 +461,13 @@ export default function PlayerPage() {
         { data: seasons },
         { data: matches },
         { data: leaguesData },
+        { data: playerRolesData },
+        { data: playerRoleAssignmentsData },
         { data: awardsRaw },
       ] = await Promise.all([
         supabase
           .from('players')
-          .select('id, name, display_name, number, position, nationality, player_type, image_url, teams(id, name, logo_url, league)')
+          .select('id, name, display_name, number, position, nationality, player_type, player_type_description, image_url, teams(id, name, logo_url, league)')
           .eq('id', playerId)
           .single(),
         supabase.from('stats').select('*').eq('player_id', playerId),
@@ -457,6 +475,8 @@ export default function PlayerPage() {
         supabase.from('seasons').select('id, name'),
         supabase.from('matches').select('id, game_date'),
         supabase.from('leagues').select('id, name, abbreviation, short_name, display_name'),
+        supabase.from('player_roles').select('id, name, description'),
+        supabase.from('player_role_assignments').select('player_id, role_id').eq('player_id', playerId),
         supabase
           .from('awards')
           .select('id, player_id, season, league, award')
@@ -473,6 +493,8 @@ export default function PlayerPage() {
         setAwards([])
         setSeasonOptions([])
         setTeamOptions([])
+        setPlayerRoles([])
+        setPlayerRoleAssignments([])
         return
       }
 
@@ -485,6 +507,8 @@ export default function PlayerPage() {
         : null
       setPlayer(playerRecord)
       setLeagues((leaguesData as LeagueRecord[]) || [])
+      setPlayerRoles((playerRolesData as PlayerRoleRecord[]) || [])
+      setPlayerRoleAssignments((playerRoleAssignmentsData as PlayerRoleAssignmentRecord[]) || [])
       setSeasonOptions((seasons as SeasonRecord[]) || [])
       setTeamOptions((teams as TeamRecord[]) || [])
 
@@ -636,7 +660,26 @@ export default function PlayerPage() {
   const showPlusMinus = (value: number, gp: number) =>
     statsView === 'perGame' ? avg(value, gp) : formatPlusMinus(value)
 
-  const playerType = player.player_type || 'N/A'
+  const assignedPlayerRoles = playerRoles.filter((role) =>
+    playerRoleAssignments.some((assignment) => assignment.role_id === role.id)
+  )
+  const fallbackPlayerRole =
+    player.player_type
+      ? playerRoles.find((role) => role.name.trim().toLowerCase() === player.player_type?.trim().toLowerCase())
+      : null
+  const visiblePlayerRoles = assignedPlayerRoles.length
+    ? assignedPlayerRoles
+    : fallbackPlayerRole
+      ? [fallbackPlayerRole]
+      : player.player_type
+        ? [
+            {
+              id: 'legacy-role',
+              name: player.player_type,
+              description: player.player_type_description || '',
+            },
+          ]
+        : []
   const displayName = player.display_name || player.name
   const primaryTeam = getPrimaryTeam(player.teams)
   const teamName = primaryTeam?.name || 'No Team'
@@ -742,8 +785,14 @@ export default function PlayerPage() {
       position: player.position || '',
       nationality: player.nationality || '',
       player_type: player.player_type || '',
+      player_type_description: player.player_type_description || '',
       image_url: player.image_url || '',
     })
+    setEditorRoleIds(
+      playerRoleAssignments
+        .map((assignment) => assignment.role_id)
+        .filter((roleId): roleId is string => Boolean(roleId))
+    )
     setEditorStats(mergeEditableStats(allStats))
     setEditorAwards(awards.map((award) => makeEditableAward(award)))
     setIsEditorOpen(true)
@@ -833,6 +882,14 @@ export default function PlayerPage() {
     })
   }
 
+  function toggleEditorRole(roleId: string) {
+    setEditorRoleIds((current) =>
+      current.includes(roleId)
+        ? current.filter((currentRoleId) => currentRoleId !== roleId)
+        : [...current, roleId]
+    )
+  }
+
   async function saveEditor() {
     if (!player || !isAdmin) return
 
@@ -846,6 +903,7 @@ export default function PlayerPage() {
       position: editorFacts.position.trim() || null,
       nationality: editorFacts.nationality.trim() || null,
       player_type: editorFacts.player_type.trim() || null,
+      player_type_description: editorFacts.player_type_description.trim() || null,
       image_url: editorFacts.image_url.trim() || null,
     }
 
@@ -920,6 +978,11 @@ export default function PlayerPage() {
         award: row.award.trim() || null,
       }))
 
+    const roleAssignmentRows = editorRoleIds.map((roleId) => ({
+      player_id: playerId,
+      role_id: roleId,
+    }))
+
     const actions: PromiseLike<{ error: { message: string } | null }>[] = [
       supabase.from('players').update(factsPayload).eq('id', playerId),
     ]
@@ -949,6 +1012,10 @@ export default function PlayerPage() {
     }
     if (deletedAwardIds.length) {
       actions.push(supabase.from('awards').delete().in('id', deletedAwardIds))
+    }
+    actions.push(supabase.from('player_role_assignments').delete().eq('player_id', playerId))
+    if (roleAssignmentRows.length) {
+      actions.push(supabase.from('player_role_assignments').insert(roleAssignmentRows))
     }
 
     const results = await Promise.all(actions)
@@ -1118,7 +1185,22 @@ export default function PlayerPage() {
           <div style={factsGrid}>
             <Fact label="Position" value={player.position || 'N/A'} />
             <Fact label="Nationality" value={player.nationality || 'N/A'} />
-            <Fact label="Player Type" value={playerType} />
+            <Fact
+              label="Player Role"
+              value={
+                visiblePlayerRoles.length ? (
+                  <div style={roleListWrap}>
+                    {visiblePlayerRoles.map((role) => (
+                      <RoleBadge
+                        key={role.id}
+                        label={role.name}
+                        description={role.description?.trim() || ''}
+                      />
+                    ))}
+                  </div>
+                ) : 'N/A'
+              }
+            />
             <Fact label="Team" value={teamName} />
           </div>
         </div>
@@ -1570,8 +1652,30 @@ export default function PlayerPage() {
                       style={editorInput}
                     />
                   </label>
+                  <div style={{ ...editorField, gridColumn: '1 / -1' }}>
+                    <span style={editorLabel}>Player Roles</span>
+                    <div style={editorRoleList}>
+                      {playerRoles.map((role) => {
+                        const isSelected = editorRoleIds.includes(role.id)
+
+                        return (
+                          <button
+                            key={role.id}
+                            type="button"
+                            onClick={() => toggleEditorRole(role.id)}
+                            style={isSelected ? editorRoleChipActive : editorRoleChip}
+                          >
+                            {role.name}
+                          </button>
+                        )
+                      })}
+                      {!playerRoles.length ? (
+                        <span style={editorRoleEmpty}>No shared roles yet. Add them from Show More.</span>
+                      ) : null}
+                    </div>
+                  </div>
                   <label style={editorField}>
-                    <span style={editorLabel}>Player Type</span>
+                    <span style={editorLabel}>Legacy Role Name</span>
                     <input
                       value={editorFacts.player_type}
                       onChange={(event) =>
@@ -1581,6 +1685,21 @@ export default function PlayerPage() {
                         }))
                       }
                       style={editorInput}
+                      placeholder="Optional fallback"
+                    />
+                  </label>
+                  <label style={editorField}>
+                    <span style={editorLabel}>Legacy Role Description</span>
+                    <input
+                      value={editorFacts.player_type_description}
+                      onChange={(event) =>
+                        setEditorFacts((current) => ({
+                          ...current,
+                          player_type_description: event.target.value,
+                        }))
+                      }
+                      style={editorInput}
+                      placeholder="Optional fallback"
                     />
                   </label>
                   <label style={{ ...editorField, gridColumn: '1 / -1' }}>
@@ -1822,11 +1941,41 @@ export default function PlayerPage() {
   )
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function Fact({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div style={factCard}>
       <div style={factLabel}>{label}</div>
       <div style={factValue}>{value}</div>
+    </div>
+  )
+}
+
+function RoleBadge({ label, description }: { label: string; description: string }) {
+  const [isOpen, setIsOpen] = useState(false)
+
+  return (
+    <div
+      style={roleBadgeWrap}
+      onMouseEnter={() => setIsOpen(true)}
+      onMouseLeave={() => setIsOpen(false)}
+      onFocus={() => setIsOpen(true)}
+      onBlur={() => setIsOpen(false)}
+    >
+      <button type="button" style={roleBadgeButton}>
+        {label}
+      </button>
+      {description ? (
+        <div
+          style={{
+            ...roleTooltip,
+            opacity: isOpen ? 1 : 0,
+            transform: isOpen ? 'translateY(0)' : 'translateY(6px)',
+            pointerEvents: isOpen ? 'auto' : 'none',
+          }}
+        >
+          {description}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -2048,6 +2197,48 @@ const factValue = {
   fontSize: 18,
   fontWeight: 700,
   color: '#102f47',
+}
+
+const roleListWrap = {
+  display: 'flex',
+  flexWrap: 'wrap' as const,
+  gap: 10,
+}
+
+const roleBadgeWrap = {
+  position: 'relative' as const,
+  display: 'inline-flex',
+  alignItems: 'center',
+}
+
+const roleBadgeButton = {
+  border: '0',
+  borderRadius: 999,
+  background: '#eef1f5',
+  color: '#12354b',
+  padding: '6px 14px',
+  fontSize: 12,
+  fontWeight: 800,
+  lineHeight: 1.2,
+  letterSpacing: '0.01em',
+  boxShadow: 'inset 0 0 0 1px rgba(18, 53, 75, 0.03)',
+}
+
+const roleTooltip = {
+  position: 'absolute' as const,
+  left: 0,
+  top: 'calc(100% + 10px)',
+  zIndex: 20,
+  width: 240,
+  borderRadius: 10,
+  background: '#12354b',
+  color: '#fff',
+  padding: '10px 12px',
+  fontSize: 12,
+  fontWeight: 500,
+  lineHeight: 1.45,
+  boxShadow: '0 8px 24px rgba(16, 47, 71, 0.22)',
+  transition: 'opacity 0.18s ease, transform 0.18s ease',
 }
 
 const tabsWrap = {
@@ -2409,6 +2600,35 @@ const editorLabel = {
   fontWeight: 600,
 }
 
+const editorRoleList = {
+  display: 'flex',
+  flexWrap: 'wrap' as const,
+  gap: 8,
+}
+
+const editorRoleChip = {
+  border: '1px solid #c9d5df',
+  borderRadius: 999,
+  background: '#fff',
+  color: '#12354b',
+  padding: '7px 12px',
+  fontSize: 12,
+  fontWeight: 700,
+}
+
+const editorRoleChipActive = {
+  ...editorRoleChip,
+  border: '1px solid #1d7f4a',
+  background: '#eaf8ef',
+  color: '#165337',
+}
+
+const editorRoleEmpty = {
+  color: '#738392',
+  fontSize: 12,
+  fontWeight: 600,
+}
+
 const editorInput = {
   height: 36,
   border: '1px solid #cad4de',
@@ -2417,6 +2637,18 @@ const editorInput = {
   fontSize: 13,
   background: '#fff',
   color: '#102f47',
+}
+
+const editorTextarea = {
+  minHeight: 88,
+  border: '1px solid #cad4de',
+  borderRadius: 8,
+  padding: '10px 12px',
+  fontSize: 13,
+  background: '#fff',
+  color: '#102f47',
+  resize: 'vertical' as const,
+  fontFamily: 'inherit',
 }
 
 const editorRowCard = {
