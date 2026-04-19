@@ -1062,13 +1062,7 @@ button:hover {
 }
 
 .motion-hero-card::after {
-  content: "";
-  position: absolute;
-  inset: -15% -10% auto;
-  height: 55%;
-  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.12), transparent 70%);
-  pointer-events: none;
-  animation: heroCardAura 6.4s ease-in-out infinite;
+  content: none;
 }
 
 .motion-hero-image {
