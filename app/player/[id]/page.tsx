@@ -43,6 +43,7 @@ type StatRecord = {
   player_id?: string
   team_id?: string | null
   season_id?: string | null
+  position?: string | null
   match_id?: string | null
   game_type?: string | null
   gp?: number | null
@@ -96,6 +97,7 @@ type EditableStatSide = {
 type EditableStatRecord = {
   team_id?: string | null
   season_id?: string | null
+  position?: string | null
   regular: EditableStatSide
   playoffs: EditableStatSide
 }
@@ -127,6 +129,7 @@ type GroupedStat = {
   teamId: string | null
   logo: string | null
   teamLeague: string | null
+  position: string | null
   gp: number
   goals: number
   assists: number
@@ -306,10 +309,12 @@ function mergeEditableStats(stats: FullStat[]) {
   const rows = new Map<string, EditableStatRecord>()
 
   stats.forEach((stat) => {
-    const key = `${stat.season_id || 'no-season'}-${stat.team_id || `no-team-${stat.id}`}`
+    const statPosition = stat.position || ''
+    const key = `${stat.season_id || 'no-season'}-${stat.team_id || `no-team-${stat.id}`}-${statPosition || 'no-position'}`
     const existing = rows.get(key) || {
       team_id: stat.team_id || '',
       season_id: stat.season_id || '',
+      position: statPosition,
       regular: makeEditableStatSide(),
       playoffs: makeEditableStatSide(),
     }
@@ -362,6 +367,12 @@ function makeClientId() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined
 }
 
+function getStatRole(position?: string | null, fallbackPosition?: string | null) {
+  return isGoaliePosition(position || fallbackPosition) ? 'goalie' : 'skater'
+}
+
+const commonPositionOptions = ['C', 'LW', 'RW', 'D', 'F', 'G']
+
 export default function PlayerPage() {
   const params = useParams()
   const playerId = params?.id as string
@@ -376,6 +387,7 @@ export default function PlayerPage() {
   const [teamOptions, setTeamOptions] = useState<TeamRecord[]>([])
   const [statsView, setStatsView] = useState<'default' | 'perGame'>('default')
   const [tab, setTab] = useState<'regular' | 'playoffs' | 'combined'>('regular')
+  const [careerRole, setCareerRole] = useState<'skater' | 'goalie'>('skater')
   const [awardView, setAwardView] = useState<'season' | 'league'>('season')
   const [errorMessage, setErrorMessage] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -519,6 +531,7 @@ export default function PlayerPage() {
             teamId: stat.team?.id || null,
             logo: stat.team?.logo_url || null,
             teamLeague: stat.team?.league || null,
+            position: stat.position || playerRecord?.position || null,
             gp: 0,
             goals: 0,
             assists: 0,
@@ -583,6 +596,27 @@ export default function PlayerPage() {
     fetchData()
   }, [playerId, tab, reloadKey])
 
+  useEffect(() => {
+    if (!player) return
+
+    const hasGoalieStats = allStats.some((stat) => getStatRole(stat.position, player.position) === 'goalie')
+    const hasSkaterStats = allStats.some((stat) => getStatRole(stat.position, player.position) === 'skater')
+
+    if (hasGoalieStats && !hasSkaterStats) {
+      setCareerRole('goalie')
+      return
+    }
+
+    if (!hasGoalieStats && hasSkaterStats) {
+      setCareerRole('skater')
+      return
+    }
+
+    if (hasGoalieStats && hasSkaterStats) {
+      setCareerRole((current) => current || (isGoaliePosition(player.position) ? 'goalie' : 'skater'))
+    }
+  }, [allStats, player])
+
   if (!player && !errorMessage) {
     return <div style={{ minHeight: '40vh' }} />
   }
@@ -607,12 +641,20 @@ export default function PlayerPage() {
   const primaryTeam = getPrimaryTeam(player.teams)
   const teamName = primaryTeam?.name || 'No Team'
   const flagUrl = getFlagUrl(player.nationality)
-  const isGoalie = isGoaliePosition(player.position)
+  const availableCareerRoles = Array.from(
+    new Set(allStats.map((stat) => getStatRole(stat.position, player.position)))
+  ) as Array<'skater' | 'goalie'>
+  const showCareerRoleTabs = availableCareerRoles.length > 1
+  const effectiveCareerRole = showCareerRoleTabs ? careerRole : availableCareerRoles[0] || (isGoaliePosition(player.position) ? 'goalie' : 'skater')
+  const isGoalie = effectiveCareerRole === 'goalie'
   const playerLeague = resolveLeagueRecord(primaryTeam?.league, leagues)
   const playerLeagueLabel = playerLeague?.abbreviation || primaryTeam?.league || 'No League'
   const currentSeasonLabel = stats[0]?.season?.name || allStats[0]?.season?.name || ''
   const last10 = stats.slice(0, 10)
-  const careerTotals = grouped.reduce<CareerTotal[]>((totals, seasonRow) => {
+  const visibleGrouped = grouped.filter(
+    (group) => getStatRole(group.position, player.position) === effectiveCareerRole
+  )
+  const careerTotals = visibleGrouped.reduce<CareerTotal[]>((totals, seasonRow) => {
     const existing = totals.find((item) => item.league === seasonRow.team)
     const calcPct = formatSavePct(seasonRow.saves, seasonRow.shotsAgainst, seasonRow.gk_percentage)
 
@@ -713,13 +755,14 @@ export default function PlayerPage() {
       {
         team_id: primaryTeam?.id || '',
         season_id: '',
+        position: player.position || '',
         regular: makeEditableStatSide(),
         playoffs: makeEditableStatSide(),
       },
     ])
   }
 
-  function updateStatRow(index: number, field: 'season_id' | 'team_id', value: string) {
+  function updateStatRow(index: number, field: 'season_id' | 'team_id' | 'position', value: string) {
     setEditorStats((current) =>
       current.map((row, rowIndex) =>
         rowIndex === index
@@ -814,6 +857,7 @@ export default function PlayerPage() {
         player_id: playerId,
         team_id: row.team_id || null,
         season_id: row.season_id || null,
+        position: row.position?.trim() || editorFacts.position.trim() || null,
         game_type: gameType,
         gp: side.gp.trim() ? Number(side.gp) : null,
         goals: side.goals.trim() ? Number(side.goals) : null,
@@ -1140,6 +1184,24 @@ export default function PlayerPage() {
 
       <div style={statsTabsWrap}>
         <div style={statsModeWrap}>
+          {showCareerRoleTabs ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setCareerRole('skater')}
+                style={careerRole === 'skater' ? statsModeActive : statsModeInactive}
+              >
+                Skaters
+              </button>
+              <button
+                type="button"
+                onClick={() => setCareerRole('goalie')}
+                style={careerRole === 'goalie' ? statsModeActive : statsModeInactive}
+              >
+                Goalies
+              </button>
+            </>
+          ) : null}
           <button
             type="button"
             onClick={() => setStatsView('default')}
@@ -1193,10 +1255,10 @@ export default function PlayerPage() {
             </tr>
           </thead>
           <tbody>
-            {grouped.map((group, index) => {
+            {visibleGrouped.map((group, index) => {
               const sogPerGame = avg(group.shots, group.gp)
               const calcPct = formatSavePct(group.saves, group.shotsAgainst, group.gk_percentage)
-              const showSeasonLabel = index === 0 || grouped[index - 1]?.season !== group.season
+              const showSeasonLabel = index === 0 || visibleGrouped[index - 1]?.season !== group.season
               const rowLeague =
                 getLeagueForTeamLeague(group.teamLeague) ||
                 (normalizeLookupValue(group.teamLeague) === normalizeLookupValue(playerLeagueLabel)
@@ -1549,7 +1611,14 @@ export default function PlayerPage() {
                 </div>
 
                 {editorStats.map((row, index) => {
-                  const editorIsGoalie = isGoaliePosition(editorFacts.position)
+                  const editorIsGoalie = isGoaliePosition(row.position || editorFacts.position)
+                  const rowPositionOptions = Array.from(
+                    new Set(
+                      [row.position || '', editorFacts.position || '', ...commonPositionOptions]
+                        .map((value) => value.trim())
+                        .filter(Boolean)
+                    )
+                  )
 
                   return (
                     <div key={`${row.regular.id || row.playoffs.id || 'new'}-${index}`} style={editorRowCard}>
@@ -1572,6 +1641,21 @@ export default function PlayerPage() {
                             {teamOptions.map((teamOption) => (
                               <option key={teamOption.id} value={teamOption.id}>
                                 {teamOption.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label style={editorField}>
+                          <span style={editorLabel}>Position</span>
+                          <select
+                            value={row.position || ''}
+                            onChange={(event) => updateStatRow(index, 'position', event.target.value)}
+                            style={editorInput}
+                          >
+                            <option value="">Player default</option>
+                            {rowPositionOptions.map((positionOption) => (
+                              <option key={positionOption} value={positionOption}>
+                                {positionOption}
                               </option>
                             ))}
                           </select>
@@ -2255,7 +2339,7 @@ const editorFactsGrid = {
 
 const editorSeasonHeaderRow = {
   display: 'grid',
-  gridTemplateColumns: 'minmax(0, 260px)',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
   gap: 12,
   marginBottom: 12,
 }
