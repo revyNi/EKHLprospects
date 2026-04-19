@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../../lib/supabaseClient'
+import LoadingExperience from '../../../../components/LoadingExperience'
 
 type LeagueRecord = {
   id: string
@@ -114,7 +115,11 @@ export default function LeagueTeamsPage() {
   }, [identifier])
 
   if (isLoading) {
-    return <div style={pageWrap} />
+    return (
+      <div style={pageWrap}>
+        <LoadingExperience label="Loading teams, logos, and roster counts..." />
+      </div>
+    )
   }
 
   if (!league) {

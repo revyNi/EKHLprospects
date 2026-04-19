@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../lib/supabaseClient'
 import { loadAdminStatus } from '../../../lib/adminClient'
+import HoverPreviewLink from '../../../components/HoverPreviewLink'
 
 type TeamRecord = {
   id: string
@@ -1035,14 +1036,15 @@ export default function PlayerPage() {
   }
 
   return (
-    <div style={container}>
-      <div style={heroCard}>
+    <div style={container} className="motion-page-root">
+      <div style={heroCard} className="motion-hero-card">
         <div style={heroLeft}>
           <div style={playerPhotoWrap}>
             <img
               src={player.image_url || 'https://via.placeholder.com/180x180?text=Player'}
               alt={player.name}
               style={playerPhoto}
+              className="motion-hero-image"
             />
           </div>
 
@@ -1056,21 +1058,21 @@ export default function PlayerPage() {
             <div style={heroMeta}>
               <span>{player.number ? `#${player.number}` : '#--'}</span>
               {primaryTeam?.id ? (
-                <Link href={`/team/${primaryTeam.id}`} style={heroMetaLink}>
+                <HoverPreviewLink href={`/team/${primaryTeam.id}`} entityType="team" entityId={primaryTeam.id} style={heroMetaLink}>
                   {teamName}
-                </Link>
+                </HoverPreviewLink>
               ) : (
                 <span>{teamName}</span>
               )}
               <span>/</span>
               {playerLeague ? (
-                <Link href={`/league/${playerLeague.id}`} style={heroMetaLink}>
+                <HoverPreviewLink href={`/league/${playerLeague.id}`} entityType="league" entityId={playerLeague.id} style={heroMetaLink}>
                   {playerLeagueLabel}
-                </Link>
+                </HoverPreviewLink>
               ) : primaryTeam?.league ? (
-                <Link href={`/league/${encodeURIComponent(primaryTeam.league)}`} style={heroMetaLink}>
+                <HoverPreviewLink href={`/league/${encodeURIComponent(primaryTeam.league)}`} entityType="league" lookupValue={primaryTeam.league} style={heroMetaLink}>
                   {playerLeagueLabel}
-                </Link>
+                </HoverPreviewLink>
               ) : (
                 <span>{playerLeagueLabel}</span>
               )}
@@ -1181,7 +1183,7 @@ export default function PlayerPage() {
       ) : null}
 
       <div style={topGrid}>
-        <div style={sectionCard}>
+        <div style={sectionCard} className="motion-section-card motion-section-card-delay-1">
           <div style={sectionHeader}>PLAYER FACTS</div>
           <div style={factsGrid}>
             <Fact label="Position" value={player.position || 'N/A'} />
@@ -1206,7 +1208,7 @@ export default function PlayerPage() {
           </div>
         </div>
 
-        <div style={sectionCard}>
+        <div style={sectionCard} className="motion-section-card motion-section-card-delay-2">
           <div style={sectionHeader}>GAME LOG</div>
           <table style={table}>
             <thead>
@@ -1240,10 +1242,11 @@ export default function PlayerPage() {
         </div>
       </div>
 
-      <div style={tabsWrap}>
+      <div style={tabsWrap} className="motion-tab-group motion-section-card-delay-1">
         <button
           type="button"
           onClick={() => setTab('regular')}
+          className="motion-tab-button"
           style={tab === 'regular' ? activeTab : inactiveTab}
         >
           Regular Season
@@ -1251,6 +1254,7 @@ export default function PlayerPage() {
         <button
           type="button"
           onClick={() => setTab('playoffs')}
+          className="motion-tab-button"
           style={tab === 'playoffs' ? activeTab : inactiveTab}
         >
           Playoffs
@@ -1258,19 +1262,21 @@ export default function PlayerPage() {
         <button
           type="button"
           onClick={() => setTab('combined')}
+          className="motion-tab-button"
           style={tab === 'combined' ? activeTab : inactiveTab}
         >
           Regular Season + Playoffs
         </button>
       </div>
 
-      <div style={statsTabsWrap}>
+      <div style={statsTabsWrap} className="motion-tab-group motion-section-card-delay-2">
         <div style={statsModeWrap}>
           {showCareerRoleTabs ? (
             <>
               <button
                 type="button"
                 onClick={() => setCareerRole('skater')}
+                className="motion-tab-button"
                 style={careerRole === 'skater' ? statsModeActive : statsModeInactive}
               >
                 Skaters
@@ -1278,6 +1284,7 @@ export default function PlayerPage() {
               <button
                 type="button"
                 onClick={() => setCareerRole('goalie')}
+                className="motion-tab-button"
                 style={careerRole === 'goalie' ? statsModeActive : statsModeInactive}
               >
                 Goalies
@@ -1287,6 +1294,7 @@ export default function PlayerPage() {
           <button
             type="button"
             onClick={() => setStatsView('default')}
+            className="motion-tab-button"
             style={statsView === 'default' ? statsModeActive : statsModeInactive}
           >
             Default
@@ -1294,6 +1302,7 @@ export default function PlayerPage() {
           <button
             type="button"
             onClick={() => setStatsView('perGame')}
+            className="motion-tab-button"
             style={statsView === 'perGame' ? statsModeActive : statsModeInactive}
           >
             Per Game Average
@@ -1301,9 +1310,9 @@ export default function PlayerPage() {
         </div>
       </div>
 
-      <div style={sectionCard}>
+      <div style={sectionCard} className="motion-section-card motion-section-card-delay-3">
         <div style={sectionHeader}>CAREER STATS</div>
-        <table style={table}>
+        <table style={table} className="motion-table">
           <thead>
             <tr style={tableHead}>
               <th style={thLeft}>Season</th>
@@ -1360,9 +1369,9 @@ export default function PlayerPage() {
                     <div style={teamCell}>
                       {group.logo ? <img src={group.logo} alt={group.team} style={teamLogo} /> : null}
                       {group.teamId ? (
-                        <Link href={`/team/${group.teamId}`} style={teamLinkStyle}>
+                        <HoverPreviewLink href={`/team/${group.teamId}`} entityType="team" entityId={group.teamId} style={teamLinkStyle}>
                           {group.team}
-                        </Link>
+                        </HoverPreviewLink>
                       ) : (
                         <span style={isInternationalRow ? internationalPlainText : undefined}>{group.team}</span>
                       )}
@@ -1371,13 +1380,13 @@ export default function PlayerPage() {
                   <td style={leftCellStyle}>
                     {group.teamLeague ? (
                       rowLeague ? (
-                        <Link href={`/league/${rowLeague.id}`} style={leagueLinkStyle}>
+                        <HoverPreviewLink href={`/league/${rowLeague.id}`} entityType="league" entityId={rowLeague.id} style={leagueLinkStyle}>
                           {rowLeague.abbreviation || group.teamLeague}
-                        </Link>
+                        </HoverPreviewLink>
                       ) : (
-                        <Link href={`/league/${encodeURIComponent(group.teamLeague)}`} style={leagueLinkStyle}>
+                        <HoverPreviewLink href={`/league/${encodeURIComponent(group.teamLeague)}`} entityType="league" lookupValue={group.teamLeague} style={leagueLinkStyle}>
                           {group.teamLeague}
-                        </Link>
+                        </HoverPreviewLink>
                       )
                     ) : (
                       '-'
@@ -1415,9 +1424,9 @@ export default function PlayerPage() {
         </table>
       </div>
 
-      <div style={sectionCard}>
+      <div style={sectionCard} className="motion-section-card motion-section-card-delay-4">
         <div style={sectionHeader}>CAREER TOTALS</div>
-        <table style={table}>
+        <table style={table} className="motion-table">
           <thead>
             <tr style={tableHead}>
               <th style={thLeft}>Seasons</th>
@@ -1473,9 +1482,9 @@ export default function PlayerPage() {
                       <img src={totalRow.logo} alt={totalRow.league} style={teamLogo} />
                     ) : null}
                     {totalRow.teamId ? (
-                      <Link href={`/team/${totalRow.teamId}`} style={teamLinkStyle}>
+                      <HoverPreviewLink href={`/team/${totalRow.teamId}`} entityType="team" entityId={totalRow.teamId} style={teamLinkStyle}>
                         {totalRow.league}
-                      </Link>
+                      </HoverPreviewLink>
                     ) : (
                       <span style={isInternationalRow ? internationalPlainText : undefined}>{totalRow.league}</span>
                     )}
@@ -1484,13 +1493,13 @@ export default function PlayerPage() {
                 <td style={leftCellStyle}>
                   {totalRow.teamLeague ? (
                     totalRowLeague ? (
-                      <Link href={`/league/${totalRowLeague.id}`} style={leagueLinkStyle}>
+                      <HoverPreviewLink href={`/league/${totalRowLeague.id}`} entityType="league" entityId={totalRowLeague.id} style={leagueLinkStyle}>
                         {totalRowLeague.abbreviation || totalRow.teamLeague}
-                      </Link>
+                      </HoverPreviewLink>
                     ) : (
-                      <Link href={`/league/${encodeURIComponent(totalRow.teamLeague)}`} style={leagueLinkStyle}>
+                      <HoverPreviewLink href={`/league/${encodeURIComponent(totalRow.teamLeague)}`} entityType="league" lookupValue={totalRow.teamLeague} style={leagueLinkStyle}>
                         {totalRow.teamLeague}
-                      </Link>
+                      </HoverPreviewLink>
                     )
                   ) : (
                     '-'
@@ -1527,11 +1536,12 @@ export default function PlayerPage() {
         </table>
       </div>
 
-      <div style={sectionCard}>
-        <div style={subTabsWrap}>
+      <div style={sectionCard} className="motion-section-card motion-section-card-delay-5">
+        <div style={subTabsWrap} className="motion-tab-group">
           <button
             type="button"
             onClick={() => setAwardView('season')}
+            className="motion-tab-button"
             style={awardView === 'season' ? subActiveTab : subInactiveTab}
           >
             Season
@@ -1539,6 +1549,7 @@ export default function PlayerPage() {
           <button
             type="button"
             onClick={() => setAwardView('league')}
+            className="motion-tab-button"
             style={awardView === 'league' ? subActiveTab : subInactiveTab}
           >
             League
@@ -1549,7 +1560,7 @@ export default function PlayerPage() {
           {player.name.toUpperCase()} CAREER HIGHLIGHTS
         </div>
 
-        <table style={table}>
+        <table style={table} className="motion-table">
           <thead>
             <tr style={highlightHead}>
               <th style={highlightThLeft}>
@@ -1589,15 +1600,15 @@ export default function PlayerPage() {
 
       {primaryTeam?.id ? (
         <div style={footerLinkWrap}>
-          <Link href={`/team/${primaryTeam.id}`} style={teamLink}>
+          <HoverPreviewLink href={`/team/${primaryTeam.id}`} entityType="team" entityId={primaryTeam.id} style={teamLink}>
             View Team Page
-          </Link>
+          </HoverPreviewLink>
         </div>
       ) : null}
 
       {isEditorOpen ? (
-        <div style={modalOverlay}>
-          <div style={modalCard}>
+        <div style={modalOverlay} className="motion-modal-overlay">
+          <div style={modalCard} className="motion-modal-card">
             <div style={modalHeader}>
               <div style={modalTitle}>Update Stats/Facts</div>
               <button type="button" onClick={() => setIsEditorOpen(false)} style={modalCloseButton}>

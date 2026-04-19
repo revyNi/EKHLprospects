@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../lib/supabaseClient'
+import HoverPreviewLink from '../../../components/HoverPreviewLink'
+import LoadingExperience from '../../../components/LoadingExperience'
 
 type LeagueRecord = {
   id: string
@@ -486,7 +488,11 @@ export default function LeagueDetailPage() {
   }, [identifier])
 
   if (isLoading) {
-    return <div style={pageWrap} />
+    return (
+      <div style={pageWrap}>
+        <LoadingExperience label="Loading league tables, leaders, and latest games..." />
+      </div>
+    )
   }
 
   if (!league) {
@@ -740,10 +746,10 @@ export default function LeagueDetailPage() {
   }
 
   return (
-    <div style={pageWrap}>
+    <div style={pageWrap} className="motion-page-root">
       <div style={shell}>
-        <div style={leagueHeroCard}>
-          <div style={heroTitleRow}>
+        <div style={leagueHeroCard} className="motion-hero-card">
+          <div style={heroTitleRow} className="motion-hero-copy">
             <div>
               <h1 style={leagueTitle}>
                 {flagUrl ? <img src={flagUrl} alt={getCountryCode(null, league.country_code) || ''} style={titleFlag} /> : null}
@@ -761,10 +767,10 @@ export default function LeagueDetailPage() {
               const teamFlagUrl = getFlagUrl(team.country, team.country_code)
 
               return (
-                <Link key={team.id} href={`/team/${team.id}`} style={teamLink}>
+                <HoverPreviewLink key={team.id} href={`/team/${team.id}`} entityType="team" entityId={team.id} style={teamLink}>
                   {teamFlagUrl ? <img src={teamFlagUrl} alt={team.country_code || ''} style={teamFlag} /> : null}
                   <span>{team.name}</span>
-                </Link>
+                </HoverPreviewLink>
               )
             })}
 
@@ -860,11 +866,11 @@ export default function LeagueDetailPage() {
                               <td style={standingRankTd}>{index + 1}.</td>
                               <td style={standingTeamTd}>
                                 {team ? (
-                                  <Link href={`/team/${team.id}`} style={teamLink}>
+                                  <HoverPreviewLink href={`/team/${team.id}`} entityType="team" entityId={team.id} style={teamLink}>
                                     {team.logo_url ? <img src={team.logo_url} alt={team.name} style={teamLogo} /> : null}
                                     {standing.standing_tag ? <span style={standingTag}>{standing.standing_tag}</span> : null}
                                     <span>{team.name}</span>
-                                  </Link>
+                                  </HoverPreviewLink>
                                 ) : (
                                   <span>Team not linked</span>
                                 )}
@@ -897,11 +903,11 @@ export default function LeagueDetailPage() {
                           <td style={standingRankTd}>{index + 1}.</td>
                           <td style={standingTeamTd}>
                             {team ? (
-                              <Link href={`/team/${team.id}`} style={teamLink}>
+                              <HoverPreviewLink href={`/team/${team.id}`} entityType="team" entityId={team.id} style={teamLink}>
                                 {team.logo_url ? <img src={team.logo_url} alt={team.name} style={teamLogo} /> : null}
                                 {standing.standing_tag ? <span style={standingTag}>{standing.standing_tag}</span> : null}
                                 <span>{team.name}</span>
-                              </Link>
+                              </HoverPreviewLink>
                             ) : (
                               <span>Team not linked</span>
                             )}
@@ -1004,7 +1010,7 @@ function LeaguePlayerStatsCard({
   showMoreHref: string
 }) {
   return (
-    <div style={leaderboardCard}>
+    <div style={leaderboardCard} className="motion-section-card motion-section-card-delay-2">
       <div style={sectionHeader}>{title}</div>
       <table style={standingsTable}>
         <thead>
@@ -1035,12 +1041,12 @@ function LeaguePlayerStatsCard({
               <tr key={player.id} style={index % 2 === 0 ? standingRowAlt : standingRow}>
                 <td style={standingRankTd}>{index + 1}.</td>
                 <td style={standingTeamTd}>
-                  <Link href={`/player/${player.id}`} style={teamLink}>
+                  <HoverPreviewLink href={`/player/${player.id}`} entityType="player" entityId={player.id} style={teamLink}>
                     {flagUrl ? <img src={flagUrl} alt={player.nationality || ''} style={teamFlag} /> : null}
                     <span>
                       {player.name} ({player.position || '-'})
                     </span>
-                  </Link>
+                  </HoverPreviewLink>
                 </td>
                 <td style={standingStatTd}>{player.gp}</td>
                 {kind === 'skater' ? (
@@ -1087,7 +1093,7 @@ function LeagueMatchesCard({
   showMoreHref: string
 }) {
   return (
-    <div style={matchesCard}>
+    <div style={matchesCard} className="motion-section-card motion-section-card-delay-3">
       <div style={sectionHeader}>{title}</div>
       <table style={standingsTable}>
         <thead>
@@ -1115,20 +1121,20 @@ function LeagueMatchesCard({
                 <td style={matchesDateTd}>{match.match_date || '-'}</td>
                 <td style={standingTeamTd}>
                   {homeTeam ? (
-                    <Link href={`/team/${homeTeam.id}`} style={teamLink}>
+                    <HoverPreviewLink href={`/team/${homeTeam.id}`} entityType="team" entityId={homeTeam.id} style={teamLink}>
                       {homeTeam.logo_url ? <img src={homeTeam.logo_url} alt={homeTeam.name} style={teamLogo} /> : null}
                       <span>{homeTeam.name}</span>
-                    </Link>
+                    </HoverPreviewLink>
                   ) : (
                     <span>-</span>
                   )}
                 </td>
                 <td style={standingTeamTd}>
                   {visitingTeam ? (
-                    <Link href={`/team/${visitingTeam.id}`} style={teamLink}>
+                    <HoverPreviewLink href={`/team/${visitingTeam.id}`} entityType="team" entityId={visitingTeam.id} style={teamLink}>
                       {visitingTeam.logo_url ? <img src={visitingTeam.logo_url} alt={visitingTeam.name} style={teamLogo} /> : null}
                       <span>{visitingTeam.name}</span>
-                    </Link>
+                    </HoverPreviewLink>
                   ) : (
                     <span>-</span>
                   )}
@@ -1159,7 +1165,7 @@ function LeagueNationalityHistoryCard({
   nationalities: NationalityHistoryRow[]
 }) {
   return (
-    <div style={matchesCard}>
+    <div style={matchesCard} className="motion-section-card motion-section-card-delay-4">
       <div style={sectionHeader}>PLAYER NATIONALITIES THROUGHOUT HISTORY</div>
       <div style={nationalityGrid}>
         {nationalities.map((row) => {
@@ -1227,7 +1233,7 @@ function LeagueAllTimeSection({
     .slice(0, 5)
 
   return (
-    <div style={allTimeWrap}>
+    <div style={allTimeWrap} className="motion-section-card motion-section-card-delay-5">
       <div style={leagueGameTypeTabs}>
         <button
           type="button"
@@ -1320,7 +1326,7 @@ function LeagueAllTimeCard({
   showMoreHref: string
 }) {
   return (
-    <div style={leaderboardCard}>
+    <div style={leaderboardCard} className="motion-section-card motion-section-card-delay-2">
       <div style={sectionHeader}>{title}</div>
       <table style={standingsTable}>
         <thead>
@@ -1347,12 +1353,12 @@ function LeagueAllTimeCard({
               <tr key={player.id} style={index % 2 === 0 ? standingRowAlt : standingRow}>
                 <td style={standingRankTd}>{index + 1}.</td>
                 <td style={standingTeamTd}>
-                  <Link href={`/player/${player.id}`} style={teamLink}>
+                  <HoverPreviewLink href={`/player/${player.id}`} entityType="player" entityId={player.id} style={teamLink}>
                     {flagUrl ? <img src={flagUrl} alt={player.nationality || ''} style={teamFlag} /> : null}
                     <span>
                       {player.name} ({player.position || '-'})
                     </span>
-                  </Link>
+                  </HoverPreviewLink>
                 </td>
                 <td style={rankBy === 'gp' ? standingPrimaryTd : standingStatTd}>{player.gp}</td>
                 <td style={rankBy === 'goals' ? standingPrimaryTd : standingStatTd}>{player.goals}</td>
@@ -1389,7 +1395,7 @@ function LeagueAllTimeGoalieCard({
   showMoreHref: string
 }) {
   return (
-    <div style={leaderboardCard}>
+    <div style={leaderboardCard} className="motion-section-card motion-section-card-delay-3">
       <div style={sectionHeader}>{title}</div>
       <table style={standingsTable}>
         <thead>
@@ -1411,12 +1417,12 @@ function LeagueAllTimeGoalieCard({
               <tr key={player.id} style={index % 2 === 0 ? standingRowAlt : standingRow}>
                 <td style={standingRankTd}>{index + 1}.</td>
                 <td style={standingTeamTd}>
-                  <Link href={`/player/${player.id}`} style={teamLink}>
+                  <HoverPreviewLink href={`/player/${player.id}`} entityType="player" entityId={player.id} style={teamLink}>
                     {flagUrl ? <img src={flagUrl} alt={player.nationality || ''} style={teamFlag} /> : null}
                     <span>
                       {player.name} ({player.position || 'G'})
                     </span>
-                  </Link>
+                  </HoverPreviewLink>
                 </td>
                 <td style={standingStatTd}>{player.gp}</td>
                 <td style={rankBy === 'saves' ? standingPrimaryTd : standingStatTd}>{player.saves}</td>
@@ -1453,7 +1459,7 @@ function LeagueAllTimeSeasonCard({
   showMoreHref: string
 }) {
   return (
-    <div style={matchesCard}>
+    <div style={matchesCard} className="motion-section-card motion-section-card-delay-4">
       <div style={sectionHeader}>{title}</div>
       <table style={standingsTable}>
         <thead>
@@ -1478,18 +1484,18 @@ function LeagueAllTimeSeasonCard({
               <tr key={player.id} style={index % 2 === 0 ? standingRowAlt : standingRow}>
                 <td style={standingRankTd}>{index + 1}.</td>
                 <td style={standingTeamTd}>
-                  <Link href={`/player/${player.id}`} style={teamLink}>
+                  <HoverPreviewLink href={`/player/${player.id}`} entityType="player" entityId={player.id} style={teamLink}>
                     {flagUrl ? <img src={flagUrl} alt={player.nationality || ''} style={teamFlag} /> : null}
                     <span>
                       {player.name} ({player.position || '-'})
                     </span>
-                  </Link>
+                  </HoverPreviewLink>
                 </td>
                 <td style={matchesDateTd}>{player.seasonName}</td>
                 <td style={standingTeamTd}>
-                  <Link href={`/league/${encodeURIComponent(player.leagueName)}`} style={teamLink}>
+                  <HoverPreviewLink href={`/league/${encodeURIComponent(player.leagueName)}`} entityType="league" lookupValue={player.leagueName} style={teamLink}>
                     <span>{player.leagueName}</span>
-                  </Link>
+                  </HoverPreviewLink>
                 </td>
                 <td style={rankBy === 'gp' ? standingPrimaryTd : standingStatTd}>{player.gp}</td>
                 <td style={rankBy === 'goals' ? standingPrimaryTd : standingStatTd}>{player.goals}</td>
@@ -1526,7 +1532,7 @@ function LeagueChampionsCard({
   teamsById: Map<string, TeamRecord>
 }) {
   return (
-    <div style={matchesCard}>
+    <div style={matchesCard} className="motion-section-card motion-section-card-delay-5">
       <div style={sectionHeader}>{title}</div>
       <div style={infoGrid}>
         {champions.map((champion) => {
@@ -1537,9 +1543,9 @@ function LeagueChampionsCard({
             <div key={champion.id} style={infoItem}>
               <span style={infoYear}>{champion.champion_year}</span>
               {linkedTeam ? (
-                <Link href={`/team/${linkedTeam.id}`} style={infoLink}>
+                <HoverPreviewLink href={`/team/${linkedTeam.id}`} entityType="team" entityId={linkedTeam.id} style={infoLink}>
                   {displayName}
-                </Link>
+                </HoverPreviewLink>
               ) : (
                 <span style={infoLink}>{displayName}</span>
               )}
@@ -1560,7 +1566,7 @@ function LeagueAwardsCard({
   awards: LeagueAwardRecord[]
 }) {
   return (
-    <div style={matchesCard}>
+    <div style={matchesCard} className="motion-section-card motion-section-card-delay-5">
       <div style={sectionHeader}>{title}</div>
       <div style={infoGrid}>
         {awards.map((award) => (

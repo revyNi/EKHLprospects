@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../lib/supabaseClient'
+import HoverPreviewLink from '../../../components/HoverPreviewLink'
 
 type TeamRecord = {
   id: string
@@ -854,15 +855,16 @@ export default function TeamPage() {
   )
 
   return (
-    <div style={pageWrap}>
+    <div style={pageWrap} className="motion-page-root">
       <div style={shell}>
-        <div style={heroCard}>
+        <div style={heroCard} className="motion-hero-card">
           <div style={heroMain}>
             <div style={logoCard}>
               <img
                 src={team.logo_url || 'https://via.placeholder.com/120?text=Team'}
                 alt={team.name}
                 style={teamLogo}
+                className="motion-hero-image motion-hero-logo"
               />
             </div>
 
@@ -899,7 +901,7 @@ export default function TeamPage() {
                   : formatHeroMatchTime(match.match_date)
 
                 return (
-                  <div key={`${match.id}-${index}`} style={formItem}>
+                  <div key={`${match.id}-${index}`} style={formItem} className="motion-hero-pill">
                     <div style={resultStyle}>
                       {isFinal ? (
                         <>
@@ -914,7 +916,7 @@ export default function TeamPage() {
                     </div>
                     <div style={formBadge}>
                       {opponent?.logo_url ? (
-                        <img src={opponent.logo_url} alt={opponent.name} style={miniLogo} />
+                        <img src={opponent.logo_url} alt={opponent.name} style={miniLogo} className="motion-mini-logo" />
                       ) : (
                         <span style={miniLogoFallback}>{opponent?.name?.charAt(0) || 'T'}</span>
                       )}
@@ -928,11 +930,12 @@ export default function TeamPage() {
           </div>
         </div>
 
-        <div style={rosterCard}>
-          <div style={rosterTopBar}>
+        <div style={rosterCard} className="motion-section-card motion-section-card-delay-1">
+          <div style={rosterTopBar} className="motion-tab-group">
             <button
               type="button"
               onClick={() => setActiveView('roster')}
+              className="motion-tab-button"
               style={activeView === 'roster' ? rosterTab : rosterTabMuted}
             >
               ROSTER
@@ -940,6 +943,7 @@ export default function TeamPage() {
             <button
               type="button"
               onClick={() => setActiveView('stats')}
+              className="motion-tab-button"
               style={activeView === 'stats' ? rosterTab : rosterTabMuted}
             >
               STATS
@@ -1020,10 +1024,11 @@ function StatsCategoryTabs({
   onChange: (value: 'skaters' | 'goalies') => void
 }) {
   return (
-    <div style={statsTabsBar}>
+    <div style={statsTabsBar} className="motion-tab-group">
       <button
         type="button"
         onClick={() => onChange('skaters')}
+        className="motion-tab-button"
         style={category === 'skaters' ? statsTableTabActive : statsTableTab}
       >
         SKATER
@@ -1031,6 +1036,7 @@ function StatsCategoryTabs({
       <button
         type="button"
         onClick={() => onChange('goalies')}
+        className="motion-tab-button"
         style={category === 'goalies' ? statsTableTabActive : statsTableTab}
       >
         GOALIE
@@ -1045,7 +1051,7 @@ function RosterSection({ title, players }: { title: string; players: RosterEntry
       <div style={sectionTitle}>{title}</div>
 
       <div style={rosterTableWrap}>
-        <table style={rosterTable}>
+        <table style={rosterTable} className="motion-table">
           <thead>
             <tr style={rosterTableHead}>
               <th style={rosterThNum}>#</th>
@@ -1064,9 +1070,9 @@ function RosterSection({ title, players }: { title: string; players: RosterEntry
                       {flagUrl ? (
                         <img src={flagUrl} alt={player.nationality || ''} style={rosterFlag} />
                       ) : null}
-                      <Link href={`/player/${player.id}`} style={playerLink}>
+                      <HoverPreviewLink href={`/player/${player.id}`} entityType="player" entityId={player.id} style={playerLink}>
                         {player.name} ({formatPosition(player.position)})
-                      </Link>
+                      </HoverPreviewLink>
                     </div>
                   </td>
                 </tr>
@@ -1090,7 +1096,7 @@ function SkaterStatsSection({ players }: { players: TeamPlayerStat[] }) {
   return (
     <div style={rosterSection}>
       <div style={rosterTableWrap}>
-        <table style={rosterTable}>
+        <table style={rosterTable} className="motion-table">
           <thead>
             <tr style={rosterTableHead}>
               <th style={rosterThNum}>#</th>
@@ -1124,9 +1130,9 @@ function SkaterStatsSection({ players }: { players: TeamPlayerStat[] }) {
                       {flagUrl ? (
                         <img src={flagUrl} alt={player.nationality || ''} style={rosterFlag} />
                       ) : null}
-                      <Link href={`/player/${player.id}`} style={playerLink}>
+                      <HoverPreviewLink href={`/player/${player.id}`} entityType="player" entityId={player.id} style={playerLink}>
                         {player.name}
-                      </Link>
+                      </HoverPreviewLink>
                     </div>
                   </td>
                   <td style={statsTd}>{player.gp}</td>
@@ -1160,7 +1166,7 @@ function GoalieStatsSection({ players }: { players: TeamPlayerStat[] }) {
   return (
     <div style={rosterSection}>
       <div style={rosterTableWrap}>
-        <table style={rosterTable}>
+        <table style={rosterTable} className="motion-table">
           <thead>
             <tr style={rosterTableHead}>
               <th style={rosterThNum}>#</th>
@@ -1199,9 +1205,9 @@ function GoalieStatsSection({ players }: { players: TeamPlayerStat[] }) {
                       {flagUrl ? (
                         <img src={flagUrl} alt={player.nationality || ''} style={rosterFlag} />
                       ) : null}
-                      <Link href={`/player/${player.id}`} style={playerLink}>
+                      <HoverPreviewLink href={`/player/${player.id}`} entityType="player" entityId={player.id} style={playerLink}>
                         {player.name} ({formatPosition(player.position)})
-                      </Link>
+                      </HoverPreviewLink>
                     </div>
                   </td>
                   <td style={statsTd}>{player.gp}</td>
@@ -1241,9 +1247,9 @@ function TeamFacts({ team }: { team: TeamRecord }) {
           <div style={factLabel}>Plays in</div>
           <div style={factValue}>
             {team.league ? (
-              <Link href={`/league/${encodeURIComponent(team.league)}`} style={factLink}>
+              <HoverPreviewLink href={`/league/${encodeURIComponent(team.league)}`} entityType="league" lookupValue={team.league} style={factLink}>
                 {team.league}
-              </Link>
+              </HoverPreviewLink>
             ) : (
               'Set team league in Supabase'
             )}
@@ -1359,9 +1365,9 @@ function RosterFacts({
                           style={smallFactFlag}
                         />
                       ) : null}
-                      <Link href={`/league/${encodeURIComponent(item.league)}`} style={factLink}>
+                      <HoverPreviewLink href={`/league/${encodeURIComponent(item.league)}`} entityType="league" lookupValue={item.league} style={factLink}>
                         {item.league}
-                      </Link>
+                      </HoverPreviewLink>
                       <span>: {item.gp} GP</span>
                     </div>
                   )
@@ -1504,7 +1510,7 @@ function FranchiseCard({
   return (
     <div style={franchiseCard}>
       <div style={franchiseCardTitle}>{title}</div>
-      <table style={franchiseTable}>
+      <table style={franchiseTable} className="motion-table">
         <thead>
           <tr style={rosterTableHead}>
             <th style={franchiseRankTh}>#</th>
@@ -1531,9 +1537,9 @@ function FranchiseCard({
                 <td style={franchisePlayerTd}>
                   <div style={playerCell}>
                     {flagUrl ? <img src={flagUrl} alt={player.nationality || ''} style={rosterFlag} /> : null}
-                    <Link href={`/player/${player.id}`} style={playerLink}>
+                    <HoverPreviewLink href={`/player/${player.id}`} entityType="player" entityId={player.id} style={playerLink}>
                       {player.name} ({formatPosition(player.position)})
-                    </Link>
+                    </HoverPreviewLink>
                   </div>
                 </td>
                 <td style={rankBy === 'gp' ? franchisePrimaryStatTd : franchiseStatTd}>{player.gp}</td>
@@ -1573,7 +1579,7 @@ function FranchiseGoalieCard({
   return (
     <div style={franchiseCard}>
       <div style={franchiseCardTitle}>{title}</div>
-      <table style={franchiseTable}>
+      <table style={franchiseTable} className="motion-table">
         <thead>
           <tr style={rosterTableHead}>
             <th style={franchiseRankTh}>#</th>
@@ -1595,9 +1601,9 @@ function FranchiseGoalieCard({
                 <td style={franchisePlayerTd}>
                   <div style={playerCell}>
                     {flagUrl ? <img src={flagUrl} alt={player.nationality || ''} style={rosterFlag} /> : null}
-                    <Link href={`/player/${player.id}`} style={playerLink}>
+                    <HoverPreviewLink href={`/player/${player.id}`} entityType="player" entityId={player.id} style={playerLink}>
                       {player.name} ({formatPosition(player.position)})
-                    </Link>
+                    </HoverPreviewLink>
                   </div>
                 </td>
                 <td style={franchiseStatTd}>{player.gp}</td>
@@ -1637,7 +1643,7 @@ function FranchiseSeasonCard({
   return (
     <div style={franchiseCardWide}>
       <div style={franchiseCardTitle}>{title}</div>
-      <table style={franchiseTable}>
+      <table style={franchiseTable} className="motion-table">
         <thead>
           <tr style={rosterTableHead}>
             <th style={franchiseRankTh}>#</th>
@@ -1662,16 +1668,16 @@ function FranchiseSeasonCard({
                 <td style={franchisePlayerTd}>
                   <div style={playerCell}>
                     {flagUrl ? <img src={flagUrl} alt={player.nationality || ''} style={rosterFlag} /> : null}
-                    <Link href={`/player/${player.id}`} style={playerLink}>
+                    <HoverPreviewLink href={`/player/${player.id}`} entityType="player" entityId={player.id} style={playerLink}>
                       {player.name} ({formatPosition(player.position)})
-                    </Link>
+                    </HoverPreviewLink>
                   </div>
                 </td>
                 <td style={franchiseStatTd}>{player.seasonName}</td>
                 <td style={franchiseStatTd}>
-                  <Link href={`/league/${encodeURIComponent(player.leagueName)}`} style={franchiseLeagueLink}>
+                  <HoverPreviewLink href={`/league/${encodeURIComponent(player.leagueName)}`} entityType="league" lookupValue={player.leagueName} style={franchiseLeagueLink}>
                     {player.leagueName}
-                  </Link>
+                  </HoverPreviewLink>
                 </td>
                 <td style={rankBy === 'gp' ? franchisePrimaryStatTd : franchiseStatTd}>{player.gp}</td>
                 <td style={rankBy === 'goals' ? franchisePrimaryStatTd : franchiseStatTd}>{player.goals}</td>

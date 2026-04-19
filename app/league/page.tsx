@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { FormEvent, useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import LoadingExperience from '../../components/LoadingExperience'
 
 type LeagueCategory = 'league' | 'international'
 type LeagueRegion = 'EU' | 'RU' | 'NA'
@@ -179,7 +180,7 @@ export default function LeaguePage() {
                       </Link>
                     ))}
 
-                    {isLoading ? <div style={infoText}>Loading...</div> : null}
+                    {isLoading ? <LoadingExperience compact label="Loading leagues..." /> : null}
                   </div>
                 )
               })}
@@ -236,7 +237,7 @@ export default function LeaguePage() {
                       </Link>
                     ))}
 
-                    {isLoading ? <div style={infoText}>Loading...</div> : null}
+                    {isLoading ? <LoadingExperience compact label="Loading leagues..." /> : null}
                   </div>
                 )
               })}

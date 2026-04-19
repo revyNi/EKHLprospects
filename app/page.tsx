@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { loadAdminStatus } from '../lib/adminClient'
+import LoadingExperience from '../components/LoadingExperience'
 
 type TeamRecord = {
   id: string
@@ -402,7 +403,7 @@ export default function HomePage() {
             </tbody>
           </table>
 
-          {isLoading ? <div style={footerInfo}>Loading transfers...</div> : null}
+          {isLoading ? <LoadingExperience compact label="Loading transfers..." /> : null}
           {errorMessage ? <div style={errorText}>{errorMessage}</div> : null}
           {!isLoading ? (
             <div style={footerBar}>

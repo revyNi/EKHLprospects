@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
 import { loadAdminStatus } from '../lib/adminClient'
+import AnimatedNumber from '../components/AnimatedNumber'
 
 type AdminPanelType = 'player' | 'stats' | 'league' | 'team' | 'standings' | 'match' | 'role' | null
 
@@ -797,15 +798,8 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
       : fallbackLeagueOptions
   const sidebarLeagueOptions = resolvedLeagueOptions.length ? resolvedLeagueOptions : fallbackLeagueOptions
   const latestAddedPlayerFlagUrl = getNationalityFlagUrl(latestAddedPlayer?.nationality)
-  const formattedDatabasePlayerCount = databasePlayerCount
-    ? new Intl.NumberFormat('fr-FR').format(databasePlayerCount).replace(/\u202f/g, ' ')
-    : '0'
-  const formattedDatabaseTeamCount = databaseTeamCount
-    ? new Intl.NumberFormat('fr-FR').format(databaseTeamCount).replace(/\u202f/g, ' ')
-    : '0'
-  const formattedDatabaseLeagueCount = databaseLeagueCount
-    ? new Intl.NumberFormat('fr-FR').format(databaseLeagueCount).replace(/\u202f/g, ' ')
-    : '0'
+  const formatDatabaseCount = (value: number) =>
+    value ? new Intl.NumberFormat('fr-FR').format(value).replace(/\u202f/g, ' ') : '0'
   const activeLeaderLeagueId = selectedLeaderLeague || sidebarLeagueOptions[0]?.id || ''
   const activeLeaderLeague = sidebarLeagueOptions.find((league) => league.id === activeLeaderLeagueId) || null
   const leaderShowMoreHref = activeLeaderLeague
@@ -1402,16 +1396,16 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
             </div>
           </div>
 
-          <div style={mainHeader}>
-            <div style={mainHeaderInner}>
-              <div style={logoContainer}>
+          <div style={mainHeader} className="global-main-header">
+            <div style={mainHeaderInner} className="global-main-header-inner">
+              <div style={logoContainer} className="global-logo-container">
                 <Link href="/" style={logoLink}>
                   <span style={logoEkhl}>EKHL</span>
                   <span style={logoProspects}>prospects</span>
                 </Link>
               </div>
 
-              <nav style={nav}>
+              <nav style={nav} className="global-nav">
                 {pages.map((page) => {
                   const isActive =
                     pathname === page.href ||
@@ -1421,6 +1415,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                     <Link
                       key={page.name}
                       href={page.href}
+                      className="global-nav-link"
                       style={{
                         ...navLink,
                         ...(isActive ? navActive : {}),
@@ -1432,37 +1427,38 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                 })}
               </nav>
 
-              {isAdmin ? <div style={adminMenuWrap}>
+              {isAdmin ? <div style={adminMenuWrap} className="global-admin-wrap">
                 <button
                   type="button"
                   onClick={() => setIsAdminMenuOpen((value) => !value)}
                   style={adminMenuButton}
+                  className="global-admin-button"
                 >
                   <span style={adminMenuDots}>⋮⋮</span>
                   <span>Show More</span>
                 </button>
 
                 {isAdminMenuOpen ? (
-                  <div style={adminMenuPanel}>
-                    <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('player')}>
+                  <div style={adminMenuPanel} className="global-admin-panel">
+                    <button type="button" style={adminMenuItem} className="global-admin-item" onClick={() => openAdminPanel('player')}>
                       Add Player
                     </button>
-                    <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('stats')}>
+                    <button type="button" style={adminMenuItem} className="global-admin-item" onClick={() => openAdminPanel('stats')}>
                       Add Roster/Stats
                     </button>
-                    <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('league')}>
+                    <button type="button" style={adminMenuItem} className="global-admin-item" onClick={() => openAdminPanel('league')}>
                       Add League
                     </button>
-                    <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('team')}>
+                    <button type="button" style={adminMenuItem} className="global-admin-item" onClick={() => openAdminPanel('team')}>
                       Add Team
                     </button>
-                    <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('role')}>
+                    <button type="button" style={adminMenuItem} className="global-admin-item" onClick={() => openAdminPanel('role')}>
                       Add/Update Player Roles
                     </button>
-                    <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('standings')}>
+                    <button type="button" style={adminMenuItem} className="global-admin-item" onClick={() => openAdminPanel('standings')}>
                       Add/Update Standings
                     </button>
-                    <button type="button" style={adminMenuItem} onClick={() => openAdminPanel('match')}>
+                    <button type="button" style={adminMenuItem} className="global-admin-item" onClick={() => openAdminPanel('match')}>
                       Add/Update Match
                     </button>
                   </div>
@@ -1716,15 +1712,36 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
               <div className="global-database-card">
                 <div className="global-database-row">
                   <span className="global-database-label">Database:</span>
-                  <span className="global-database-value">{formattedDatabasePlayerCount} players</span>
+                  <span className="global-database-value">
+                    <AnimatedNumber
+                      value={databasePlayerCount}
+                      formatter={formatDatabaseCount}
+                      className="animated-number"
+                    />{' '}
+                    players
+                  </span>
                 </div>
                 <div className="global-database-row">
                   <span className="global-database-label">Teams:</span>
-                  <span className="global-database-value">{formattedDatabaseTeamCount} teams</span>
+                  <span className="global-database-value">
+                    <AnimatedNumber
+                      value={databaseTeamCount}
+                      formatter={formatDatabaseCount}
+                      className="animated-number"
+                    />{' '}
+                    teams
+                  </span>
                 </div>
                 <div className="global-database-row">
                   <span className="global-database-label">Leagues:</span>
-                  <span className="global-database-value">{formattedDatabaseLeagueCount} leagues</span>
+                  <span className="global-database-value">
+                    <AnimatedNumber
+                      value={databaseLeagueCount}
+                      formatter={formatDatabaseCount}
+                      className="animated-number"
+                    />{' '}
+                    leagues
+                  </span>
                 </div>
                 <div className="global-database-row">
                   <span className="global-database-label">Last added:</span>
@@ -1790,10 +1807,12 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                                 <span>{leader.name}</span>
                               </Link>
                             </td>
-                            <td>{leader.gp}</td>
-                            <td>{leader.goals}</td>
-                            <td>{leader.assists}</td>
-                            <td className="global-leaders-points">{leader.points}</td>
+                            <td><AnimatedNumber value={leader.gp} className="animated-number" /></td>
+                            <td><AnimatedNumber value={leader.goals} className="animated-number" /></td>
+                            <td><AnimatedNumber value={leader.assists} className="animated-number" /></td>
+                            <td className="global-leaders-points">
+                              <AnimatedNumber value={leader.points} className="animated-number" />
+                            </td>
                           </tr>
                         )
                       })}
@@ -2583,7 +2602,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
 
 const body: React.CSSProperties = {
   margin: 0,
-  fontFamily: '"Segoe UI", Arial, Helvetica, sans-serif',
+  fontFamily: '"Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif',
   backgroundColor: '#f1f4f8',
 }
 
@@ -2610,7 +2629,7 @@ const topBarInner: React.CSSProperties = {
 const topBarDisclaimer: React.CSSProperties = {
   color: 'rgba(223, 236, 245, 0.82)',
   fontSize: 11,
-  fontWeight: 600,
+  fontWeight: 700,
   lineHeight: 1.2,
   paddingRight: 16,
 }
@@ -2685,7 +2704,7 @@ const mainHeaderInner: React.CSSProperties = {
   margin: '0 auto',
   display: 'flex',
   alignItems: 'center',
-  gap: 24,
+  gap: 28,
   padding: '0 28px',
   minHeight: 84,
 }
@@ -2773,6 +2792,7 @@ const navLink: React.CSSProperties = {
   fontSize: 15,
   position: 'relative',
   padding: '10px 0',
+  transition: 'opacity 180ms ease, transform 180ms ease, color 180ms ease',
 }
 
 const navActive: React.CSSProperties = {
@@ -2797,36 +2817,40 @@ const modalCard: React.CSSProperties = {
   width: 'min(900px, 100%)',
   maxHeight: '90vh',
   overflowY: 'auto',
-  background: '#fff',
-  borderRadius: 8,
-  boxShadow: '0 16px 34px rgba(0,0,0,0.24)',
+  background: 'rgba(255,255,255,0.98)',
+  borderRadius: 18,
+  border: '1px solid rgba(18, 63, 88, 0.08)',
+  boxShadow: '0 28px 60px rgba(0,0,0,0.22)',
+  backdropFilter: 'blur(16px)',
 }
 
 const modalHeader: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  padding: '18px 20px',
+  padding: '22px 24px',
   borderBottom: '1px solid #d7e1ea',
 }
 
 const modalTitle: React.CSSProperties = {
-  fontSize: 22,
+  fontSize: 24,
   fontWeight: 800,
   color: '#102f47',
+  letterSpacing: '-0.02em',
 }
 
 const closeButton: React.CSSProperties = {
-  border: '1px solid #b8c6d3',
-  borderRadius: 6,
-  background: '#fff',
+  border: '1px solid #c4d2dd',
+  borderRadius: 10,
+  background: 'linear-gradient(180deg, #ffffff, #f3f7fa)',
   color: '#173650',
-  padding: '8px 12px',
+  padding: '9px 14px',
   fontSize: 13,
+  fontWeight: 800,
 }
 
 const modalBody: React.CSSProperties = {
-  padding: 20,
+  padding: 24,
 }
 
 const bulkSectionHeader: React.CSSProperties = {
@@ -2851,9 +2875,10 @@ const standingsRowsWrap: React.CSSProperties = {
 
 const standingRowCard: React.CSSProperties = {
   border: '1px solid #d5dfe8',
-  borderRadius: 8,
-  background: '#f8fbfe',
-  padding: 16,
+  borderRadius: 14,
+  background: 'linear-gradient(180deg, #fbfdff, #f5f9fc)',
+  padding: 18,
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.86)',
 }
 
 const standingRowHeader: React.CSSProperties = {
@@ -2871,57 +2896,59 @@ const standingRowTitle: React.CSSProperties = {
 
 const miniActionButton: React.CSSProperties = {
   border: 'none',
-  borderRadius: 6,
-  background: '#31a64a',
+  borderRadius: 10,
+  background: 'linear-gradient(180deg, #35b14f, #2a9e47)',
   color: '#fff',
   fontSize: 12,
   fontWeight: 800,
-  padding: '9px 12px',
+  padding: '10px 13px',
 }
 
 const miniDangerButton: React.CSSProperties = {
   border: '1px solid #d9a2aa',
-  borderRadius: 6,
-  background: '#fff',
+  borderRadius: 10,
+  background: 'linear-gradient(180deg, #ffffff, #fff7f8)',
   color: '#a73445',
   fontSize: 12,
   fontWeight: 800,
-  padding: '8px 12px',
+  padding: '9px 13px',
 }
 
 const formGrid: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-  gap: 14,
+  gap: 16,
 }
 
 const fieldWrap: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  gap: 6,
+  gap: 7,
 }
 
 const fieldLabel: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 700,
-  color: '#445f74',
+  color: '#516777',
+  letterSpacing: '0.02em',
 }
 
 const fieldInput: React.CSSProperties = {
-  height: 38,
-  border: '1px solid #c4d0db',
-  borderRadius: 6,
-  padding: '0 10px',
+  height: 42,
+  border: '1px solid #c6d2dc',
+  borderRadius: 10,
+  padding: '0 12px',
   fontSize: 14,
   color: '#173650',
   background: '#fff',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9)',
 }
 
 const fieldTextarea: React.CSSProperties = {
   minHeight: 104,
-  border: '1px solid #c4d0db',
-  borderRadius: 6,
-  padding: '10px',
+  border: '1px solid #c6d2dc',
+  borderRadius: 12,
+  padding: '12px',
   fontSize: 14,
   color: '#173650',
   background: '#fff',
@@ -2934,7 +2961,7 @@ const modalFooter: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'space-between',
   gap: 12,
-  padding: '0 20px 20px 20px',
+  padding: '0 24px 24px 24px',
 }
 
 const saveMessage: React.CSSProperties = {
@@ -2958,9 +2985,10 @@ const progressBar: React.CSSProperties = {
 
 const primaryButton: React.CSSProperties = {
   border: '1px solid #2d8a3f',
-  borderRadius: 6,
-  background: '#31a64a',
+  borderRadius: 10,
+  background: 'linear-gradient(180deg, #35b14f, #2a9e47)',
   color: '#fff',
-  padding: '10px 18px',
+  padding: '11px 20px',
   fontSize: 14,
+  fontWeight: 800,
 }

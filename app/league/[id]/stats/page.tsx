@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../../../../lib/supabaseClient'
+import HoverPreviewLink from '../../../../components/HoverPreviewLink'
 
 type LeagueRecord = {
   id: string
@@ -591,17 +592,17 @@ export default function LeagueStatsPage() {
           </select>
         </div>
 
-        <div style={tabsRow}>
-          <button type="button" onClick={() => setActiveTab('season')} style={activeTab === 'season' ? tabActive : tab}>
+        <div style={tabsRow} className="motion-tab-group">
+          <button type="button" onClick={() => setActiveTab('season')} className="motion-tab-button" style={activeTab === 'season' ? tabActive : tab}>
             Season
           </button>
-          <button type="button" onClick={() => setActiveTab('allTime')} style={activeTab === 'allTime' ? tabActive : tab}>
+          <button type="button" onClick={() => setActiveTab('allTime')} className="motion-tab-button" style={activeTab === 'allTime' ? tabActive : tab}>
             All-Time
           </button>
-          <button type="button" onClick={() => setActiveTab('allTimeSeason')} style={activeTab === 'allTimeSeason' ? tabActive : tab}>
+          <button type="button" onClick={() => setActiveTab('allTimeSeason')} className="motion-tab-button" style={activeTab === 'allTimeSeason' ? tabActive : tab}>
             All-time / Season
           </button>
-          <button type="button" onClick={() => setActiveTab('allTimeTeam')} style={activeTab === 'allTimeTeam' ? tabActive : tab}>
+          <button type="button" onClick={() => setActiveTab('allTimeTeam')} className="motion-tab-button" style={activeTab === 'allTimeTeam' ? tabActive : tab}>
             All-time / Team
           </button>
         </div>
@@ -791,7 +792,7 @@ function StatsTable({
   return (
     <div style={tableCard}>
       <div style={tableTitle}>{title}</div>
-      <table style={table}>
+      <table style={table} className="motion-table">
         <thead>
           <tr style={tableHead}>
             <th style={rankTh}>#</th>
@@ -845,12 +846,12 @@ function StatsTable({
               <tr key={`${row.playerId}-${index}`} style={index % 2 === 0 ? tableRowAlt : tableRow}>
                 <td style={rankTd}>{index + 1}.</td>
                 <td style={playerTd}>
-                  <Link href={`/player/${row.playerId}`} style={playerLink}>
+                  <HoverPreviewLink href={`/player/${row.playerId}`} entityType="player" entityId={row.playerId} style={playerLink}>
                     {flagUrl ? <img src={flagUrl} alt={row.nationality || ''} style={playerFlag} /> : null}
                     <span>
                       {row.playerName} ({formatPosition(row.position)})
                     </span>
-                  </Link>
+                  </HoverPreviewLink>
                 </td>
                 {showSeason ? <td style={seasonTd}>{seasonLabel}</td> : null}
                 {showTeam ? <td style={teamTd}>{teamLabel}</td> : null}
