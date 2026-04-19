@@ -1066,7 +1066,7 @@ button:hover {
   position: absolute;
   inset: -15% -10% auto;
   height: 55%;
-  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.16), transparent 68%);
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.12), transparent 70%);
   pointer-events: none;
   animation: heroCardAura 6.4s ease-in-out infinite;
 }
