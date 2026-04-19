@@ -1810,8 +1810,10 @@ button:hover {
   font-size: 13px;
   font-weight: 800;
   text-transform: uppercase;
+  letter-spacing: 0.03em;
   text-decoration: none;
   transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+  box-shadow: 0 10px 18px rgba(35, 143, 66, 0.16);
 }
 
 .global-page-content {

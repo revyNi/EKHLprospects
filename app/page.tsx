@@ -798,15 +798,18 @@ const footerBar = {
 }
 
 const showMoreButton = {
-  minWidth: 254,
+  minWidth: 312,
   height: 40,
   border: 'none',
-  borderRadius: 24,
-  background: '#28a34c',
+  borderRadius: 10,
+  background: 'linear-gradient(180deg, #36b24f, #2b9f47)',
   color: '#fff',
   fontSize: 13,
   fontWeight: 800,
-  padding: '0 22px',
+  letterSpacing: '0.03em',
+  textTransform: 'uppercase' as const,
+  padding: '0 28px',
+  boxShadow: '0 10px 18px rgba(35, 143, 66, 0.16)',
 }
 
 const modalOverlay = {

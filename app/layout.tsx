@@ -2608,7 +2608,7 @@ const body: React.CSSProperties = {
 
 const header: React.CSSProperties = {
   position: 'relative',
-  zIndex: 40,
+  zIndex: 140,
 }
 
 const topBar: React.CSSProperties = {
@@ -2714,6 +2714,7 @@ const adminMenuWrap: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   marginLeft: 'auto',
+  zIndex: 180,
 }
 
 const adminMenuButton: React.CSSProperties = {
@@ -2742,6 +2743,7 @@ const adminMenuPanel: React.CSSProperties = {
   borderRadius: 4,
   boxShadow: '0 8px 22px rgba(0,0,0,0.22)',
   overflow: 'hidden',
+  zIndex: 220,
 }
 
 const adminMenuItem: React.CSSProperties = {

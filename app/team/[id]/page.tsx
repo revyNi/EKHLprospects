@@ -2358,14 +2358,19 @@ const franchisePrimaryStatTd = {
 }
 
 const showMoreBar = {
-  background: '#209b52',
+  width: 'calc(100% - 20px)',
+  margin: '10px',
+  borderRadius: 10,
+  background: 'linear-gradient(180deg, #36b24f, #2b9f47)',
   color: '#fff',
   textAlign: 'center' as const,
-  fontFamily: 'var(--font-inter), sans-serif',
   fontSize: 13,
-  fontWeight: 600,
-  letterSpacing: '-0.01em',
-  padding: '11px 12px',
+  fontWeight: 800,
+  letterSpacing: '0.03em',
+  textTransform: 'uppercase' as const,
+  padding: '12px 12px',
   textDecoration: 'none',
   display: 'block',
+  boxSizing: 'border-box' as const,
+  boxShadow: '0 10px 18px rgba(35, 143, 66, 0.16)',
 }
