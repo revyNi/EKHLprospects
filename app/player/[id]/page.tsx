@@ -375,7 +375,7 @@ export default function PlayerPage() {
   const [seasonOptions, setSeasonOptions] = useState<SeasonRecord[]>([])
   const [teamOptions, setTeamOptions] = useState<TeamRecord[]>([])
   const [statsView, setStatsView] = useState<'default' | 'perGame'>('default')
-  const [tab, setTab] = useState<'regular' | 'playoffs'>('regular')
+  const [tab, setTab] = useState<'regular' | 'playoffs' | 'combined'>('regular')
   const [awardView, setAwardView] = useState<'season' | 'league'>('season')
   const [errorMessage, setErrorMessage] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -494,7 +494,9 @@ export default function PlayerPage() {
       setAllStats(fullStats)
 
       const filteredStats = fullStats
-        .filter((stat) => (stat.game_type || 'regular') === tab)
+        .filter((stat) =>
+          tab === 'combined' ? true : (stat.game_type || 'regular') === tab
+        )
         .sort((a, b) => {
           const dateA = a.match?.game_date ? new Date(a.match.game_date).getTime() : 0
           const dateB = b.match?.game_date ? new Date(b.match.game_date).getTime() : 0
@@ -536,7 +538,7 @@ export default function PlayerPage() {
           }
         }
 
-        groupedMap[key].gp += Number(stat.gp) || 1
+        groupedMap[key].gp += Number(stat.gp) || 0
         groupedMap[key].goals += Number(stat.goals) || 0
         groupedMap[key].assists += Number(stat.assists) || 0
         groupedMap[key].points +=
@@ -1127,6 +1129,13 @@ export default function PlayerPage() {
         >
           Playoffs
         </button>
+        <button
+          type="button"
+          onClick={() => setTab('combined')}
+          style={tab === 'combined' ? activeTab : inactiveTab}
+        >
+          Regular Season + Playoffs
+        </button>
       </div>
 
       <div style={statsTabsWrap}>
@@ -1179,7 +1188,6 @@ export default function PlayerPage() {
                   <th style={thRight}>SOG/G</th>
                   <th style={thRight}>TOI</th>
                   <th style={thRight}>+/-</th>
-                  <th style={thRight}>SV%</th>
                 </>
               )}
             </tr>
@@ -1248,7 +1256,6 @@ export default function PlayerPage() {
                       <td style={tdRight}>{sogPerGame}</td>
                       <td style={tdRight}>{showStat(group.toi, group.gp)}</td>
                       <td style={tdRight}>{showPlusMinus(group.plusMinus, group.gp)}</td>
-                      <td style={tdRight}>{group.gk_percentage || calcPct}</td>
                     </>
                   )}
                 </tr>
@@ -1289,7 +1296,6 @@ export default function PlayerPage() {
                   <th style={thRight}>SOG/G</th>
                   <th style={thRight}>TOI</th>
                   <th style={thRight}>+/-</th>
-                  <th style={thRight}>SV%</th>
                 </>
               )}
             </tr>
@@ -1357,7 +1363,6 @@ export default function PlayerPage() {
                     <td style={tdRight}>{avg(totalRow.shots, totalRow.gp)}</td>
                     <td style={tdRight}>{showStat(totalRow.toi, totalRow.gp)}</td>
                     <td style={tdRight}>{showPlusMinus(totalRow.plusMinus, totalRow.gp)}</td>
-                    <td style={tdRight}>{totalRow.gk_percentage || totalRow.calcPct}</td>
                   </>
                 )}
               </tr>

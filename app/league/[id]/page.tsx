@@ -257,6 +257,13 @@ function sortStandingsRows(rows: StandingRecord[]) {
   })
 }
 
+function compareSeasonNames(left: string, right: string) {
+  return left.localeCompare(right, undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  })
+}
+
 const standingTagLegend: Record<string, string> = {
   p: 'Clinched Presidents Trophy',
   y: 'Clinched Conference',
@@ -412,9 +419,9 @@ export default function LeagueDetailPage() {
           [...standingsRows.map((standing) => standing.season_id), ...matchRows.map((match) => match.season_id)].filter(Boolean)
         )
       ) as string[]
-      const availableStandingSeasons = seasonRows.filter((season) =>
-        usedSeasonIds.includes(String(season.id))
-      )
+      const availableStandingSeasons = seasonRows
+        .filter((season) => usedSeasonIds.includes(String(season.id)))
+        .sort((a, b) => compareSeasonNames(a.name, b.name))
 
       const teamIds = teamRows.map((team) => team.id)
       let statsRows: StatRecord[] = []
@@ -726,6 +733,7 @@ export default function LeagueDetailPage() {
         : Math.min(currentIndex + 1, standingSeasons.length - 1)
 
     setSelectedStandingSeasonId(standingSeasons[nextIndex].id)
+    setSelectedStandingDivision('all')
   }
 
   return (
@@ -950,7 +958,7 @@ export default function LeagueDetailPage() {
 
         <LeagueMatchesCard
           title={`${leagueShortName.toUpperCase()} GAMES`}
-          matches={filteredMatches}
+          matches={filteredMatches.slice(0, 5)}
           teamsById={teamsById}
           showMoreHref={gamesPageHref}
         />
