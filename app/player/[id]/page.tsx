@@ -76,6 +76,7 @@ type MatchRecord = {
 
 type EditableStatSide = {
   id?: string
+  position: string
   gp: string
   goals: string
   assists: string
@@ -97,7 +98,6 @@ type EditableStatSide = {
 type EditableStatRecord = {
   team_id?: string | null
   season_id?: string | null
-  position?: string | null
   regular: EditableStatSide
   playoffs: EditableStatSide
 }
@@ -286,6 +286,7 @@ function toInputValue(value?: string | number | null) {
 function makeEditableStatSide(stat?: FullStat | null): EditableStatSide {
   return {
     id: stat?.id,
+    position: toInputValue(stat?.position),
     gp: toInputValue(stat?.gp),
     goals: toInputValue(stat?.goals),
     assists: toInputValue(stat?.assists),
@@ -309,12 +310,10 @@ function mergeEditableStats(stats: FullStat[]) {
   const rows = new Map<string, EditableStatRecord>()
 
   stats.forEach((stat) => {
-    const statPosition = stat.position || ''
-    const key = `${stat.season_id || 'no-season'}-${stat.team_id || `no-team-${stat.id}`}-${statPosition || 'no-position'}`
+    const key = `${stat.season_id || 'no-season'}-${stat.team_id || `no-team-${stat.id}`}`
     const existing = rows.get(key) || {
       team_id: stat.team_id || '',
       season_id: stat.season_id || '',
-      position: statPosition,
       regular: makeEditableStatSide(),
       playoffs: makeEditableStatSide(),
     }
@@ -334,6 +333,7 @@ function mergeEditableStats(stats: FullStat[]) {
 function statSideHasValues(side: EditableStatSide) {
   const values = [
     side.gp,
+    side.position,
     side.goals,
     side.assists,
     side.points,
@@ -755,14 +755,13 @@ export default function PlayerPage() {
       {
         team_id: primaryTeam?.id || '',
         season_id: '',
-        position: player.position || '',
         regular: makeEditableStatSide(),
         playoffs: makeEditableStatSide(),
       },
     ])
   }
 
-  function updateStatRow(index: number, field: 'season_id' | 'team_id' | 'position', value: string) {
+  function updateStatRow(index: number, field: 'season_id' | 'team_id', value: string) {
     setEditorStats((current) =>
       current.map((row, rowIndex) =>
         rowIndex === index
@@ -857,7 +856,7 @@ export default function PlayerPage() {
         player_id: playerId,
         team_id: row.team_id || null,
         season_id: row.season_id || null,
-        position: row.position?.trim() || editorFacts.position.trim() || null,
+        position: side.position.trim() || editorFacts.position.trim() || null,
         game_type: gameType,
         gp: side.gp.trim() ? Number(side.gp) : null,
         goals: side.goals.trim() ? Number(side.goals) : null,
@@ -1611,10 +1610,16 @@ export default function PlayerPage() {
                 </div>
 
                 {editorStats.map((row, index) => {
-                  const editorIsGoalie = isGoaliePosition(row.position || editorFacts.position)
+                  const regularIsGoalie = isGoaliePosition(row.regular.position || editorFacts.position)
+                  const playoffsIsGoalie = isGoaliePosition(row.playoffs.position || editorFacts.position)
                   const rowPositionOptions = Array.from(
                     new Set(
-                      [row.position || '', editorFacts.position || '', ...commonPositionOptions]
+                      [
+                        row.regular.position || '',
+                        row.playoffs.position || '',
+                        editorFacts.position || '',
+                        ...commonPositionOptions,
+                      ]
                         .map((value) => value.trim())
                         .filter(Boolean)
                     )
@@ -1646,21 +1651,6 @@ export default function PlayerPage() {
                           </select>
                         </label>
                         <label style={editorField}>
-                          <span style={editorLabel}>Position</span>
-                          <select
-                            value={row.position || ''}
-                            onChange={(event) => updateStatRow(index, 'position', event.target.value)}
-                            style={editorInput}
-                          >
-                            <option value="">Player default</option>
-                            {rowPositionOptions.map((positionOption) => (
-                              <option key={positionOption} value={positionOption}>
-                                {positionOption}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label style={editorField}>
                           <span style={editorLabel}>Season</span>
                           <select
                             value={row.season_id || ''}
@@ -1682,10 +1672,25 @@ export default function PlayerPage() {
                           <div style={editorSideTitle}>Regular</div>
                           <div style={editorStatsGrid}>
                             <label style={editorField}>
+                              <span style={editorLabel}>Position</span>
+                              <select
+                                value={row.regular.position}
+                                onChange={(event) => updateStatSideRow(index, 'regular', 'position', event.target.value)}
+                                style={editorInput}
+                              >
+                                <option value="">Player default</option>
+                                {rowPositionOptions.map((positionOption) => (
+                                  <option key={`regular-${positionOption}`} value={positionOption}>
+                                    {positionOption}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label style={editorField}>
                               <span style={editorLabel}>GP</span>
                               <input value={row.regular.gp} onChange={(event) => updateStatSideRow(index, 'regular', 'gp', event.target.value)} style={editorInput} />
                             </label>
-                            {editorIsGoalie ? (
+                            {regularIsGoalie ? (
                               <>
                                 <label style={editorField}><span style={editorLabel}>W</span><input value={row.regular.goalie_wins} onChange={(event) => updateStatSideRow(index, 'regular', 'goalie_wins', event.target.value)} style={editorInput} /></label>
                                 <label style={editorField}><span style={editorLabel}>L</span><input value={row.regular.goalie_losses} onChange={(event) => updateStatSideRow(index, 'regular', 'goalie_losses', event.target.value)} style={editorInput} /></label>
@@ -1715,10 +1720,25 @@ export default function PlayerPage() {
                           <div style={editorSideTitle}>Playoffs</div>
                           <div style={editorStatsGrid}>
                             <label style={editorField}>
+                              <span style={editorLabel}>Position</span>
+                              <select
+                                value={row.playoffs.position}
+                                onChange={(event) => updateStatSideRow(index, 'playoffs', 'position', event.target.value)}
+                                style={editorInput}
+                              >
+                                <option value="">Player default</option>
+                                {rowPositionOptions.map((positionOption) => (
+                                  <option key={`playoffs-${positionOption}`} value={positionOption}>
+                                    {positionOption}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label style={editorField}>
                               <span style={editorLabel}>GP</span>
                               <input value={row.playoffs.gp} onChange={(event) => updateStatSideRow(index, 'playoffs', 'gp', event.target.value)} style={editorInput} />
                             </label>
-                            {editorIsGoalie ? (
+                            {playoffsIsGoalie ? (
                               <>
                                 <label style={editorField}><span style={editorLabel}>W</span><input value={row.playoffs.goalie_wins} onChange={(event) => updateStatSideRow(index, 'playoffs', 'goalie_wins', event.target.value)} style={editorInput} /></label>
                                 <label style={editorField}><span style={editorLabel}>L</span><input value={row.playoffs.goalie_losses} onChange={(event) => updateStatSideRow(index, 'playoffs', 'goalie_losses', event.target.value)} style={editorInput} /></label>
@@ -2339,7 +2359,7 @@ const editorFactsGrid = {
 
 const editorSeasonHeaderRow = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
   gap: 12,
   marginBottom: 12,
 }
