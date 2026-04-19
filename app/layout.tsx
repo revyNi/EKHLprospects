@@ -83,6 +83,13 @@ type SidebarLeaderRow = {
   points: number
 }
 
+type SidebarDatabasePlayer = {
+  id: string
+  name: string
+  nationality?: string | null
+  created_at?: string | null
+}
+
 type AdminPlayerForm = {
   name: string
   display_name: string
@@ -382,6 +389,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [leaderTeams, setLeaderTeams] = useState<SearchTeamOption[]>([])
   const [leaderStats, setLeaderStats] = useState<SidebarStatRecord[]>([])
   const [selectedLeaderLeague, setSelectedLeaderLeague] = useState('')
+  const [databasePlayerCount, setDatabasePlayerCount] = useState(0)
+  const [databaseTeamCount, setDatabaseTeamCount] = useState(0)
+  const [databaseLeagueCount, setDatabaseLeagueCount] = useState(0)
+  const [latestAddedPlayer, setLatestAddedPlayer] = useState<SidebarDatabasePlayer | null>(null)
   const [routeProgress, setRouteProgress] = useState(100)
   const [showRouteProgress, setShowRouteProgress] = useState(false)
 
@@ -610,7 +621,32 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       setLeaderStats((statsData as SidebarStatRecord[]) || [])
     }
 
+    async function fetchSidebarDatabaseMeta() {
+      const [
+        { count: playerCount },
+        { count: teamCount },
+        { count: leagueCount },
+      ] = await Promise.all([
+        supabase.from('players').select('id', { count: 'exact', head: true }),
+        supabase.from('teams').select('id', { count: 'exact', head: true }),
+        supabase.from('leagues').select('id', { count: 'exact', head: true }),
+      ])
+
+      setDatabasePlayerCount(playerCount || 0)
+      setDatabaseTeamCount(teamCount || 0)
+      setDatabaseLeagueCount(leagueCount || 0)
+
+      const { data: latestPlayerData } = await supabase
+        .from('players')
+        .select('id, name, nationality, created_at')
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      setLatestAddedPlayer(((latestPlayerData as SidebarDatabasePlayer[]) || [])[0] || null)
+    }
+
     fetchSidebarLeaders()
+    fetchSidebarDatabaseMeta()
   }, [])
 
   useEffect(() => {
@@ -736,6 +772,16 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
         }))
       : fallbackLeagueOptions
   const sidebarLeagueOptions = resolvedLeagueOptions.length ? resolvedLeagueOptions : fallbackLeagueOptions
+  const latestAddedPlayerFlagUrl = getNationalityFlagUrl(latestAddedPlayer?.nationality)
+  const formattedDatabasePlayerCount = databasePlayerCount
+    ? new Intl.NumberFormat('fr-FR').format(databasePlayerCount).replace(/\u202f/g, ' ')
+    : '0'
+  const formattedDatabaseTeamCount = databaseTeamCount
+    ? new Intl.NumberFormat('fr-FR').format(databaseTeamCount).replace(/\u202f/g, ' ')
+    : '0'
+  const formattedDatabaseLeagueCount = databaseLeagueCount
+    ? new Intl.NumberFormat('fr-FR').format(databaseLeagueCount).replace(/\u202f/g, ' ')
+    : '0'
   const activeLeaderLeagueId = selectedLeaderLeague || sidebarLeagueOptions[0]?.id || ''
   const activeLeaderLeague = sidebarLeagueOptions.find((league) => league.id === activeLeaderLeagueId) || null
   const leaderShowMoreHref = activeLeaderLeague
@@ -913,12 +959,65 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
       image_url: playerForm.image_url.trim() || null,
     }
 
-    const { error } = await supabase.from('players').insert(payload)
+    const { data, error } = await supabase
+      .from('players')
+      .insert(payload)
+      .select('id, name, nationality, position, image_url')
+      .single()
 
     if (error) {
       setAdminSaveMessage(error.message)
       setAdminIsSaving(false)
       return
+    }
+
+    const insertedPlayer = data as
+      | {
+          id: string
+          name: string
+          nationality?: string | null
+          position?: string | null
+          image_url?: string | null
+        }
+      | null
+
+    if (insertedPlayer) {
+      setDatabasePlayerCount((current) => current + 1)
+      setLatestAddedPlayer({
+        id: insertedPlayer.id,
+        name: insertedPlayer.name,
+        nationality: insertedPlayer.nationality || null,
+        created_at: new Date().toISOString(),
+      })
+      setSearchPlayers((current) => {
+        const next = [
+          {
+            id: insertedPlayer.id,
+            name: insertedPlayer.name,
+            position: insertedPlayer.position || null,
+            nationality: insertedPlayer.nationality || null,
+            image_url: insertedPlayer.image_url || null,
+          },
+          ...current.filter((player) => player.id !== insertedPlayer.id),
+        ]
+
+        return next
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .slice(0, 24)
+      })
+      setLeaderPlayers((current) => {
+        const next = [
+          {
+            id: insertedPlayer.id,
+            name: insertedPlayer.name,
+            nationality: insertedPlayer.nationality || null,
+            position: insertedPlayer.position || null,
+          },
+          ...current.filter((player) => player.id !== insertedPlayer.id),
+        ]
+
+        return next.sort((a, b) => a.name.localeCompare(b.name))
+      })
     }
 
     setAdminSaveMessage('Player added.')
@@ -1014,6 +1113,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
       return
     }
 
+    setDatabaseLeagueCount((current) => current + 1)
     setAdminSaveMessage('League added.')
     setLeagueForm(emptyLeagueForm())
     setAdminIsSaving(false)
@@ -1044,6 +1144,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
       return
     }
 
+    setDatabaseTeamCount((current) => current + 1)
     setAdminSaveMessage('Team added.')
     setTeamForm(emptyTeamForm())
     setAdminIsSaving(false)
@@ -1534,6 +1635,38 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
         <main style={main}>
           <div className="global-page-shell">
             <aside className="global-leaders-sidebar">
+              <div className="global-database-card">
+                <div className="global-database-row">
+                  <span className="global-database-label">Database:</span>
+                  <span className="global-database-value">{formattedDatabasePlayerCount} players</span>
+                </div>
+                <div className="global-database-row">
+                  <span className="global-database-label">Teams:</span>
+                  <span className="global-database-value">{formattedDatabaseTeamCount} teams</span>
+                </div>
+                <div className="global-database-row">
+                  <span className="global-database-label">Leagues:</span>
+                  <span className="global-database-value">{formattedDatabaseLeagueCount} leagues</span>
+                </div>
+                <div className="global-database-row">
+                  <span className="global-database-label">Last added:</span>
+                  {latestAddedPlayer ? (
+                    <Link href={`/player/${latestAddedPlayer.id}`} className="global-database-player">
+                      {latestAddedPlayerFlagUrl ? (
+                        <img
+                          src={latestAddedPlayerFlagUrl}
+                          alt={latestAddedPlayer.nationality || ''}
+                          className="global-database-flag"
+                        />
+                      ) : null}
+                      <span>{latestAddedPlayer.name}</span>
+                    </Link>
+                  ) : (
+                    <span className="global-database-muted">Unavailable</span>
+                  )}
+                </div>
+              </div>
+
               <div className="global-leaders-card">
                 <div className="global-leaders-title">Scoring Leaders</div>
                 <div className="global-leaders-body">

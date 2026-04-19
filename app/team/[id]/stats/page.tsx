@@ -833,11 +833,15 @@ const categoryTabs = {
 }
 
 const categoryTab = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   borderBottom: '2px solid #cbd5df',
   background: 'transparent',
   color: '#173650',
   fontSize: 12,
   fontWeight: 700,
+  lineHeight: 1.1,
   padding: '8px 10px',
 }
 
@@ -854,6 +858,9 @@ const tabsRow = {
 }
 
 const tab = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   border: '1px solid #173650',
   background: '#fff',
   color: '#173650',
@@ -861,6 +868,7 @@ const tab = {
   borderRadius: 14,
   fontSize: 12,
   fontWeight: 700,
+  lineHeight: 1.1,
 }
 
 const tabActive = {
@@ -903,12 +911,16 @@ const filterSelect = {
 }
 
 const resetButton = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   border: '1px solid #c8d2db',
   borderRadius: 6,
   background: '#fff',
   padding: '6px 10px',
   fontSize: 11,
   fontWeight: 700,
+  lineHeight: 1.1,
   color: '#7d8b99',
 }
 

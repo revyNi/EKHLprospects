@@ -960,6 +960,9 @@ const categoryTabs = {
 }
 
 const categoryTab = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   flex: 1,
   maxWidth: 220,
   padding: '12px 14px',
@@ -969,6 +972,7 @@ const categoryTab = {
   color: '#173650',
   fontSize: 13,
   fontWeight: 800,
+  lineHeight: 1.1,
   cursor: 'pointer',
 }
 
@@ -978,6 +982,9 @@ const categoryTabActive = {
 }
 
 const tab = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   border: '1px solid #173650',
   background: '#fff',
   color: '#173650',
@@ -985,6 +992,7 @@ const tab = {
   borderRadius: 14,
   fontSize: 12,
   fontWeight: 700,
+  lineHeight: 1.1,
 }
 
 const tabActive = {

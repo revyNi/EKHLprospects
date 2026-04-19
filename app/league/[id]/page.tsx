@@ -228,8 +228,10 @@ function formatGaa(goalsAgainst: number, gp: number) {
 }
 
 function getStandingSortValue(standing: StandingRecord) {
+  const normalizedTag = (standing.standing_tag || '').trim().toLowerCase()
   return {
     points: Number(standing.points) || 0,
+    tagPriority: normalizedTag === 'p' ? 1 : 0,
     goalDifference:
       standing.goal_difference !== null && standing.goal_difference !== undefined
         ? Number(standing.goal_difference) || 0
@@ -248,6 +250,7 @@ function sortStandingsRows(rows: StandingRecord[]) {
 
     return (
       right.points - left.points ||
+      right.tagPriority - left.tagPriority ||
       right.goalDifference - left.goalDifference ||
       right.goalsFor - left.goalsFor ||
       right.wins - left.wins ||
@@ -1712,6 +1715,9 @@ const leagueGameTypeTabs = {
 }
 
 const leagueGameTypeTab = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   border: '1px solid #bfcbd5',
   borderBottom: 'none',
   borderTopLeftRadius: 5,
@@ -1721,6 +1727,7 @@ const leagueGameTypeTab = {
   fontSize: 11,
   fontWeight: 800,
   fontFamily: 'var(--font-inter), sans-serif',
+  lineHeight: 1.1,
   padding: '10px 18px',
   cursor: 'pointer',
   textTransform: 'uppercase' as const,

@@ -1965,6 +1965,9 @@ const statsModeWrap = {
 }
 
 const statsModeActive = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   background: '#12354b',
   color: 'white',
   border: 'none',
@@ -1973,11 +1976,15 @@ const statsModeActive = {
   padding: '10px 18px 9px 18px',
   fontSize: 12,
   fontWeight: 800,
+  lineHeight: 1.1,
   textTransform: 'uppercase' as const,
   cursor: 'pointer',
 }
 
 const statsModeInactive = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   background: '#b9c8d3',
   color: 'white',
   border: 'none',
@@ -1986,27 +1993,36 @@ const statsModeInactive = {
   padding: '10px 18px 9px 18px',
   fontSize: 12,
   fontWeight: 800,
+  lineHeight: 1.1,
   textTransform: 'uppercase' as const,
   cursor: 'pointer',
 }
 
 const activeTab = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   background: 'transparent',
   border: 'none',
   borderBottom: '3px solid #12354b',
   color: '#102f47',
   fontSize: 16,
   fontWeight: 700,
+  lineHeight: 1.2,
   padding: '0 0 6px 0',
   cursor: 'pointer',
 }
 
 const inactiveTab = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   background: 'transparent',
   border: 'none',
   color: '#102f47',
   fontSize: 16,
   fontWeight: 400,
+  lineHeight: 1.2,
   padding: '0 0 6px 0',
   cursor: 'pointer',
 }
@@ -2018,22 +2034,30 @@ const subTabsWrap = {
 }
 
 const subActiveTab = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   background: 'transparent',
   border: 'none',
   borderBottom: '3px solid #12354b',
   color: '#102f47',
   fontSize: 15,
   fontWeight: 700,
+  lineHeight: 1.2,
   padding: '0 0 6px 0',
   cursor: 'pointer',
 }
 
 const subInactiveTab = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   background: 'transparent',
   border: 'none',
   color: '#102f47',
   fontSize: 15,
   fontWeight: 400,
+  lineHeight: 1.2,
   padding: '0 0 6px 0',
   cursor: 'pointer',
 }

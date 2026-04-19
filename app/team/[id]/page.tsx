@@ -1926,10 +1926,14 @@ const rosterTopBar = {
 }
 
 const rosterTab = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   background: '#123f58',
   color: 'white',
   fontSize: 11,
   fontWeight: 700,
+  lineHeight: 1.1,
   padding: '7px 12px',
   textAlign: 'center' as const,
   border: 'none',
@@ -1937,10 +1941,14 @@ const rosterTab = {
 }
 
 const rosterTabMuted = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   background: '#aab9c6',
   color: 'white',
   fontSize: 11,
   fontWeight: 700,
+  lineHeight: 1.1,
   padding: '7px 12px',
   textAlign: 'center' as const,
   border: 'none',
@@ -1978,6 +1986,9 @@ const statsTabsBar = {
 }
 
 const statsTableTab = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   minWidth: 112,
   height: 31,
   border: 'none',
@@ -1986,6 +1997,7 @@ const statsTableTab = {
   padding: '0 14px',
   fontSize: 11,
   fontWeight: 800,
+  lineHeight: 1.1,
   cursor: 'pointer',
   textAlign: 'center' as const,
 }
@@ -2212,6 +2224,9 @@ const franchiseGameTypeTabs = {
 }
 
 const franchiseGameTypeTab = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   background: 'transparent',
   border: 'none',
   borderBottom: '3px solid transparent',
@@ -2219,7 +2234,7 @@ const franchiseGameTypeTab = {
   cursor: 'pointer',
   fontSize: 18,
   fontWeight: 500,
-  lineHeight: 1,
+  lineHeight: 1.2,
   padding: '0 0 7px 0',
 }
 
