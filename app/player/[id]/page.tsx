@@ -20,6 +20,7 @@ type LeagueRecord = {
   abbreviation?: string | null
   short_name?: string | null
   display_name?: string | null
+  category?: string | null
 }
 
 type PlayerRoleRecord = {
@@ -474,7 +475,7 @@ export default function PlayerPage() {
         supabase.from('teams').select('id, name, logo_url, league'),
         supabase.from('seasons').select('id, name'),
         supabase.from('matches').select('id, game_date'),
-        supabase.from('leagues').select('id, name, abbreviation, short_name, display_name'),
+        supabase.from('leagues').select('id, name, abbreviation, short_name, display_name, category'),
         supabase.from('player_roles').select('id, name, description'),
         supabase.from('player_role_assignments').select('player_id, role_id').eq('player_id', playerId),
         supabase
@@ -1345,30 +1346,36 @@ export default function PlayerPage() {
                 (normalizeLookupValue(group.teamLeague) === normalizeLookupValue(playerLeagueLabel)
                   ? playerLeague
                   : null)
+              const isInternationalRow = isInternationalLeague(rowLeague)
+              const leftCellStyle = isInternationalRow ? internationalTdLeft : tdLeft
+              const rightCellStyle = isInternationalRow ? internationalTdRight : tdRight
+              const pointsCellStyle = isInternationalRow ? internationalPtsCell : ptsCell
+              const teamLinkStyle = isInternationalRow ? internationalTableTeamLink : tableTeamLink
+              const leagueLinkStyle = isInternationalRow ? internationalTableLeagueLink : tableLeagueLink
 
               return (
                 <tr key={`${group.season}-${group.team}`} style={tableRow}>
-                  <td style={tdLeft}>{showSeasonLabel ? group.season : ''}</td>
-                  <td style={tdLeft}>
+                  <td style={leftCellStyle}>{showSeasonLabel ? group.season : ''}</td>
+                  <td style={leftCellStyle}>
                     <div style={teamCell}>
                       {group.logo ? <img src={group.logo} alt={group.team} style={teamLogo} /> : null}
                       {group.teamId ? (
-                        <Link href={`/team/${group.teamId}`} style={tableTeamLink}>
+                        <Link href={`/team/${group.teamId}`} style={teamLinkStyle}>
                           {group.team}
                         </Link>
                       ) : (
-                        <span>{group.team}</span>
+                        <span style={isInternationalRow ? internationalPlainText : undefined}>{group.team}</span>
                       )}
                     </div>
                   </td>
-                  <td style={tdLeft}>
+                  <td style={leftCellStyle}>
                     {group.teamLeague ? (
                       rowLeague ? (
-                        <Link href={`/league/${rowLeague.id}`} style={tableLeagueLink}>
+                        <Link href={`/league/${rowLeague.id}`} style={leagueLinkStyle}>
                           {rowLeague.abbreviation || group.teamLeague}
                         </Link>
                       ) : (
-                        <Link href={`/league/${encodeURIComponent(group.teamLeague)}`} style={tableLeagueLink}>
+                        <Link href={`/league/${encodeURIComponent(group.teamLeague)}`} style={leagueLinkStyle}>
                           {group.teamLeague}
                         </Link>
                       )
@@ -1376,29 +1383,29 @@ export default function PlayerPage() {
                       '-'
                     )}
                   </td>
-                  <td style={tdRight}>{group.gp}</td>
+                  <td style={rightCellStyle}>{group.gp}</td>
                   {isGoalie ? (
                     <>
-                      <td style={tdRight}>{showStat(group.goalieWins, group.gp)}</td>
-                      <td style={tdRight}>{showStat(group.goalieLosses, group.gp)}</td>
-                      <td style={tdRight}>{showStat(group.goalieOvertimeLosses, group.gp)}</td>
-                      <td style={tdRight}>{showStat(group.goalieShutouts, group.gp)}</td>
-                      <td style={tdRight}>{showStat(group.conceded, group.gp)}</td>
-                      <td style={tdRight}>{showStat(group.shotsAgainst, group.gp)}</td>
-                      <td style={tdRight}>{showStat(group.saves, group.gp)}</td>
-                      <td style={tdRight}>{calcPct}</td>
-                      <td style={tdRight}>{formatGaa(group.conceded, group.gp, group.toi)}</td>
+                      <td style={rightCellStyle}>{showStat(group.goalieWins, group.gp)}</td>
+                      <td style={rightCellStyle}>{showStat(group.goalieLosses, group.gp)}</td>
+                      <td style={rightCellStyle}>{showStat(group.goalieOvertimeLosses, group.gp)}</td>
+                      <td style={rightCellStyle}>{showStat(group.goalieShutouts, group.gp)}</td>
+                      <td style={rightCellStyle}>{showStat(group.conceded, group.gp)}</td>
+                      <td style={rightCellStyle}>{showStat(group.shotsAgainst, group.gp)}</td>
+                      <td style={rightCellStyle}>{showStat(group.saves, group.gp)}</td>
+                      <td style={rightCellStyle}>{calcPct}</td>
+                      <td style={rightCellStyle}>{formatGaa(group.conceded, group.gp, group.toi)}</td>
                     </>
                   ) : (
                     <>
-                      <td style={tdRight}>{showStat(group.goals, group.gp)}</td>
-                      <td style={tdRight}>{showStat(group.assists, group.gp)}</td>
-                      <td style={ptsCell}>{showStat(group.points, group.gp)}</td>
-                      <td style={tdRight}>{showStat(group.hits, group.gp)}</td>
-                      <td style={tdRight}>{showStat(group.shots, group.gp)}</td>
-                      <td style={tdRight}>{sogPerGame}</td>
-                      <td style={tdRight}>{showStat(group.toi, group.gp)}</td>
-                      <td style={tdRight}>{showPlusMinus(group.plusMinus, group.gp)}</td>
+                      <td style={rightCellStyle}>{showStat(group.goals, group.gp)}</td>
+                      <td style={rightCellStyle}>{showStat(group.assists, group.gp)}</td>
+                      <td style={pointsCellStyle}>{showStat(group.points, group.gp)}</td>
+                      <td style={rightCellStyle}>{showStat(group.hits, group.gp)}</td>
+                      <td style={rightCellStyle}>{showStat(group.shots, group.gp)}</td>
+                      <td style={rightCellStyle}>{sogPerGame}</td>
+                      <td style={rightCellStyle}>{showStat(group.toi, group.gp)}</td>
+                      <td style={rightCellStyle}>{showPlusMinus(group.plusMinus, group.gp)}</td>
                     </>
                   )}
                 </tr>
@@ -1450,32 +1457,38 @@ export default function PlayerPage() {
                 (normalizeLookupValue(totalRow.teamLeague) === normalizeLookupValue(playerLeagueLabel)
                   ? playerLeague
                   : null)
+              const isInternationalRow = isInternationalLeague(totalRowLeague)
+              const leftCellStyle = isInternationalRow ? internationalTdLeft : tdLeft
+              const rightCellStyle = isInternationalRow ? internationalTdRight : tdRight
+              const pointsCellStyle = isInternationalRow ? internationalPtsCell : ptsCell
+              const teamLinkStyle = isInternationalRow ? internationalTableTeamLink : tableTeamLink
+              const leagueLinkStyle = isInternationalRow ? internationalTableLeagueLink : tableLeagueLink
 
               return (
               <tr key={totalRow.league} style={tableRow}>
-                <td style={tdLeft}>{totalRow.seasons}</td>
-                <td style={tdLeft}>
+                <td style={leftCellStyle}>{totalRow.seasons}</td>
+                <td style={leftCellStyle}>
                   <div style={teamCell}>
                     {totalRow.logo ? (
                       <img src={totalRow.logo} alt={totalRow.league} style={teamLogo} />
                     ) : null}
                     {totalRow.teamId ? (
-                      <Link href={`/team/${totalRow.teamId}`} style={tableTeamLink}>
+                      <Link href={`/team/${totalRow.teamId}`} style={teamLinkStyle}>
                         {totalRow.league}
                       </Link>
                     ) : (
-                      <span>{totalRow.league}</span>
+                      <span style={isInternationalRow ? internationalPlainText : undefined}>{totalRow.league}</span>
                     )}
                   </div>
                 </td>
-                <td style={tdLeft}>
+                <td style={leftCellStyle}>
                   {totalRow.teamLeague ? (
                     totalRowLeague ? (
-                      <Link href={`/league/${totalRowLeague.id}`} style={tableLeagueLink}>
+                      <Link href={`/league/${totalRowLeague.id}`} style={leagueLinkStyle}>
                         {totalRowLeague.abbreviation || totalRow.teamLeague}
                       </Link>
                     ) : (
-                      <Link href={`/league/${encodeURIComponent(totalRow.teamLeague)}`} style={tableLeagueLink}>
+                      <Link href={`/league/${encodeURIComponent(totalRow.teamLeague)}`} style={leagueLinkStyle}>
                         {totalRow.teamLeague}
                       </Link>
                     )
@@ -1483,29 +1496,29 @@ export default function PlayerPage() {
                     '-'
                   )}
                 </td>
-                <td style={tdRight}>{totalRow.gp}</td>
+                <td style={rightCellStyle}>{totalRow.gp}</td>
                 {isGoalie ? (
                   <>
-                    <td style={tdRight}>{showStat(totalRow.goalieWins, totalRow.gp)}</td>
-                    <td style={tdRight}>{showStat(totalRow.goalieLosses, totalRow.gp)}</td>
-                    <td style={tdRight}>{showStat(totalRow.goalieOvertimeLosses, totalRow.gp)}</td>
-                    <td style={tdRight}>{showStat(totalRow.goalieShutouts, totalRow.gp)}</td>
-                    <td style={tdRight}>{showStat(totalRow.conceded, totalRow.gp)}</td>
-                    <td style={tdRight}>{showStat(totalRow.shotsAgainst, totalRow.gp)}</td>
-                    <td style={tdRight}>{showStat(totalRow.saves, totalRow.gp)}</td>
-                    <td style={tdRight}>{totalRow.gk_percentage || totalRow.calcPct}</td>
-                    <td style={tdRight}>{formatGaa(totalRow.conceded, totalRow.gp, totalRow.toi)}</td>
+                    <td style={rightCellStyle}>{showStat(totalRow.goalieWins, totalRow.gp)}</td>
+                    <td style={rightCellStyle}>{showStat(totalRow.goalieLosses, totalRow.gp)}</td>
+                    <td style={rightCellStyle}>{showStat(totalRow.goalieOvertimeLosses, totalRow.gp)}</td>
+                    <td style={rightCellStyle}>{showStat(totalRow.goalieShutouts, totalRow.gp)}</td>
+                    <td style={rightCellStyle}>{showStat(totalRow.conceded, totalRow.gp)}</td>
+                    <td style={rightCellStyle}>{showStat(totalRow.shotsAgainst, totalRow.gp)}</td>
+                    <td style={rightCellStyle}>{showStat(totalRow.saves, totalRow.gp)}</td>
+                    <td style={rightCellStyle}>{totalRow.gk_percentage || totalRow.calcPct}</td>
+                    <td style={rightCellStyle}>{formatGaa(totalRow.conceded, totalRow.gp, totalRow.toi)}</td>
                   </>
                 ) : (
                   <>
-                    <td style={tdRight}>{showStat(totalRow.goals, totalRow.gp)}</td>
-                    <td style={tdRight}>{showStat(totalRow.assists, totalRow.gp)}</td>
-                    <td style={ptsCell}>{showStat(totalRow.points, totalRow.gp)}</td>
-                    <td style={tdRight}>{showStat(totalRow.hits, totalRow.gp)}</td>
-                    <td style={tdRight}>{showStat(totalRow.shots, totalRow.gp)}</td>
-                    <td style={tdRight}>{avg(totalRow.shots, totalRow.gp)}</td>
-                    <td style={tdRight}>{showStat(totalRow.toi, totalRow.gp)}</td>
-                    <td style={tdRight}>{showPlusMinus(totalRow.plusMinus, totalRow.gp)}</td>
+                    <td style={rightCellStyle}>{showStat(totalRow.goals, totalRow.gp)}</td>
+                    <td style={rightCellStyle}>{showStat(totalRow.assists, totalRow.gp)}</td>
+                    <td style={pointsCellStyle}>{showStat(totalRow.points, totalRow.gp)}</td>
+                    <td style={rightCellStyle}>{showStat(totalRow.hits, totalRow.gp)}</td>
+                    <td style={rightCellStyle}>{showStat(totalRow.shots, totalRow.gp)}</td>
+                    <td style={rightCellStyle}>{avg(totalRow.shots, totalRow.gp)}</td>
+                    <td style={rightCellStyle}>{showStat(totalRow.toi, totalRow.gp)}</td>
+                    <td style={rightCellStyle}>{showPlusMinus(totalRow.plusMinus, totalRow.gp)}</td>
                   </>
                 )}
               </tr>
@@ -2199,6 +2212,10 @@ const factValue = {
   color: '#102f47',
 }
 
+function isInternationalLeague(league?: LeagueRecord | null) {
+  return (league?.category || '').trim().toLowerCase() === 'international'
+}
+
 const roleListWrap = {
   display: 'flex',
   flexWrap: 'wrap' as const,
@@ -2227,7 +2244,7 @@ const roleBadgeButton = {
 const roleTooltip = {
   position: 'absolute' as const,
   left: 0,
-  top: 'calc(100% + 10px)',
+  bottom: 'calc(100% + 10px)',
   zIndex: 20,
   width: 240,
   borderRadius: 10,
@@ -2436,6 +2453,36 @@ const tableLeagueLink = {
   textDecoration: 'none',
   fontSize: 12,
   fontWeight: 700,
+}
+
+const internationalPlainText = {
+  color: '#d9252a',
+  fontWeight: 600,
+}
+
+const internationalTdLeft = {
+  ...tdLeft,
+  color: '#d9252a',
+}
+
+const internationalTdRight = {
+  ...tdRight,
+  color: '#d9252a',
+}
+
+const internationalPtsCell = {
+  ...ptsCell,
+  color: '#d9252a',
+}
+
+const internationalTableTeamLink = {
+  ...tableTeamLink,
+  color: '#d9252a',
+}
+
+const internationalTableLeagueLink = {
+  ...tableLeagueLink,
+  color: '#d9252a',
 }
 
 const footerLinkWrap = {
