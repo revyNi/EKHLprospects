@@ -847,7 +847,7 @@ button:hover {
 }
 
 .global-main-header {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .route-transition-shell {
