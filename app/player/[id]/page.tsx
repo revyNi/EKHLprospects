@@ -3,6 +3,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../lib/supabaseClient'
 import { loadAdminStatus } from '../../../lib/adminClient'
@@ -39,6 +40,7 @@ type PlayerRecord = {
   id: string
   name: string
   display_name?: string | null
+  team_id?: string | null
   number?: number | null
   position?: string | null
   nationality?: string | null
@@ -411,9 +413,11 @@ export default function PlayerPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
   const [editorFacts, setEditorFacts] = useState({
     name: '',
     display_name: '',
+    team_id: '',
     number: '',
     position: '',
     nationality: '',
@@ -451,6 +455,10 @@ export default function PlayerPage() {
   }, [])
 
   useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  useEffect(() => {
     if (!playerId) return
 
     async function fetchData() {
@@ -469,7 +477,7 @@ export default function PlayerPage() {
       ] = await Promise.all([
         supabase
           .from('players')
-          .select('id, name, display_name, number, position, nationality, player_type, player_type_description, image_url, teams(id, name, logo_url, league)')
+          .select('id, name, display_name, team_id, number, position, nationality, player_type, player_type_description, image_url, teams(id, name, logo_url, league)')
           .eq('id', playerId)
           .single(),
         supabase.from('stats').select('*').eq('player_id', playerId),
@@ -783,6 +791,7 @@ export default function PlayerPage() {
     setEditorFacts({
       name: player.name || '',
       display_name: player.display_name || '',
+      team_id: primaryTeam?.id || player.team_id || '',
       number: toInputValue(player.number),
       position: player.position || '',
       nationality: player.nationality || '',
@@ -901,6 +910,7 @@ export default function PlayerPage() {
     const factsPayload = {
       name: editorFacts.name.trim(),
       display_name: editorFacts.display_name.trim() || null,
+      team_id: editorFacts.team_id || null,
       number: editorFacts.number.trim() ? Number(editorFacts.number) : null,
       position: editorFacts.position.trim() || null,
       nationality: editorFacts.nationality.trim() || null,
@@ -1606,7 +1616,7 @@ export default function PlayerPage() {
         </div>
       ) : null}
 
-      {isEditorOpen ? (
+      {isMounted && isEditorOpen ? createPortal(
         <div style={modalOverlay} className="motion-modal-overlay">
           <div style={modalCard} className="motion-modal-card">
             <div style={modalHeader}>
@@ -1642,6 +1652,26 @@ export default function PlayerPage() {
                       }
                       style={editorInput}
                     />
+                  </label>
+                  <label style={editorField}>
+                    <span style={editorLabel}>Default Team</span>
+                    <select
+                      value={editorFacts.team_id}
+                      onChange={(event) =>
+                        setEditorFacts((current) => ({
+                          ...current,
+                          team_id: event.target.value,
+                        }))
+                      }
+                      style={editorInput}
+                    >
+                      <option value="">No Team</option>
+                      {teamOptions.map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.name}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label style={editorField}>
                     <span style={editorLabel}>Number</span>
@@ -1959,7 +1989,8 @@ export default function PlayerPage() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   )
