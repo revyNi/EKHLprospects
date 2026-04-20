@@ -1369,21 +1369,21 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
       <body style={body}>
         <header style={header}>
           <div style={topBar}>
-            <div style={topBarInner}>
-              <div style={topBarDisclaimer}>
+            <div style={topBarInner} className="global-topbar-inner">
+              <div style={topBarDisclaimer} className="global-topbar-disclaimer">
                 This project is inspired by Elite Prospects and is not affiliated with or endorsed by them.
               </div>
-              <div style={topBarActions}>
+              <div style={topBarActions} className="global-topbar-actions">
                 <span style={topBarText}>Help</span>
                 {viewerEmail ? (
                   <>
-                    <span style={topBarUserText}>{viewerEmail}</span>
+                    <span style={topBarUserText} className="global-topbar-user">{viewerEmail}</span>
                     <button type="button" onClick={signOutViewer} style={topBarGhostButton}>
                       Sign out
                     </button>
                   </>
                 ) : (
-                  <div style={topBarAuthPills}>
+                  <div style={topBarAuthPills} className="global-topbar-auth-pills">
                     <Link href="/sign-up" style={topBarPrimaryAuthLink}>
                       Sign up
                     </Link>
