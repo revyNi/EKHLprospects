@@ -13,8 +13,6 @@ type LeagueRecord = {
   name: string
   display_name?: string | null
   full_name?: string | null
-  abbreviation?: string | null
-  short_name?: string | null
   country_code?: string | null
   logo_url?: string | null
   image_url?: string | null
@@ -338,12 +336,12 @@ export default function LeagueDetailPage() {
       const leagueRecord =
         allLeagues.find((league) => String(league.id) === identifier) ||
         allLeagues.find((league) =>
-          [league.name, league.abbreviation, league.short_name, league.display_name]
+          [league.name, league.display_name]
             .filter(Boolean)
             .some((value) => normalizeLeagueLookup(value) === normalizedIdentifier)
         ) ||
         allLeagues.find((league) =>
-          [league.name, league.abbreviation, league.short_name, league.display_name]
+          [league.name, league.display_name]
             .filter(Boolean)
             .some((value) => {
               const normalizedValue = normalizeLeagueLookup(value)
@@ -372,11 +370,7 @@ export default function LeagueDetailPage() {
         return
       }
 
-      const leagueNames = [
-        leagueRecord.name,
-        leagueRecord.abbreviation,
-        leagueRecord.short_name,
-      ].filter(Boolean) as string[]
+      const leagueNames = [leagueRecord.name].filter(Boolean) as string[]
 
       const [
         { data: teamsData, error: teamsError },
@@ -500,7 +494,7 @@ export default function LeagueDetailPage() {
   }
 
   const flagUrl = getFlagUrl(null, league.country_code)
-  const leagueShortName = league.abbreviation || league.short_name || league.name
+  const leagueShortName = league.name
   const leagueDisplayName = league.display_name || league.full_name || league.name
   const statsPageHref = `/league/${encodeURIComponent(league.id)}/stats`
   const gamesPageHref = `/league/${encodeURIComponent(league.id)}/games`

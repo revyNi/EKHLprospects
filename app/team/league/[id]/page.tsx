@@ -12,8 +12,6 @@ type LeagueRecord = {
   id: string
   name: string
   display_name?: string | null
-  abbreviation?: string | null
-  short_name?: string | null
   country_code?: string | null
 }
 
@@ -71,7 +69,7 @@ export default function LeagueTeamsPage() {
       const leagueRecord =
         leagueRows.find((row) => String(row.id) === identifier) ||
         leagueRows.find((row) =>
-          [row.name, row.abbreviation, row.short_name, row.display_name]
+          [row.name, row.display_name]
             .filter(Boolean)
             .some((value) => normalizeLeagueLookup(value) === normalizedIdentifier)
         ) ||
@@ -86,11 +84,7 @@ export default function LeagueTeamsPage() {
         return
       }
 
-      const leagueNames = [
-        leagueRecord.name,
-        leagueRecord.abbreviation,
-        leagueRecord.short_name,
-      ].filter(Boolean) as string[]
+      const leagueNames = [leagueRecord.name].filter(Boolean) as string[]
 
       const [
         { data: teamsData, error: teamsError },
@@ -132,7 +126,7 @@ export default function LeagueTeamsPage() {
     return acc
   }, {})
 
-  const leagueLabel = league.abbreviation || league.short_name || league.name
+  const leagueLabel = league.name
 
   return (
     <div style={pageWrap}>

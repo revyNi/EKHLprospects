@@ -19,8 +19,6 @@ type TeamRecord = {
 type LeagueRecord = {
   id: string
   name: string
-  abbreviation?: string | null
-  short_name?: string | null
   display_name?: string | null
   category?: string | null
 }
@@ -88,6 +86,11 @@ type SeasonRecord = {
 type MatchRecord = {
   id: string
   game_date?: string | null
+  home_team_id?: string | null
+  visiting_team_id?: string | null
+  home_score?: number | null
+  visiting_score?: number | null
+  score_note?: string | null
 }
 
 type EditableStatSide = {
@@ -232,8 +235,46 @@ function formatGaa(goalsAgainst: number, gp: number, toi: number) {
   return '0.00'
 }
 
+function formatGameTypeLabel(gameType?: string | null) {
+  return (gameType || 'regular') === 'playoffs' ? 'Playoffs' : 'Regular'
+}
+
+function formatMatchScore(match?: MatchRecord | null) {
+  if (
+    !match ||
+    match.home_score === null ||
+    match.home_score === undefined ||
+    match.visiting_score === null ||
+    match.visiting_score === undefined
+  ) {
+    return '-'
+  }
+
+  return `${match.home_score}-${match.visiting_score}${match.score_note ? ` (${match.score_note})` : ''}`
+}
+
 function normalizeLookupValue(value?: string | null) {
   return (value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+function getCompactTeamName(name?: string | null) {
+  const trimmed = (name || '').trim()
+  if (!trimmed) return '-'
+  if (trimmed.length <= 12) return trimmed
+
+  const genericWords = new Set(['team', 'hc', 'hk', 'if', 'ik', 'bk', 'sk', 'fk', 'fc', 'club'])
+  const words = trimmed.split(/\s+/).filter(Boolean)
+  const meaningfulWords = words.filter((word) => !genericWords.has(word.toLowerCase()))
+
+  if (meaningfulWords.length) {
+    const firstMeaningful = meaningfulWords[0]
+    if (firstMeaningful.length <= 12) return firstMeaningful
+
+    const lastMeaningful = meaningfulWords[meaningfulWords.length - 1]
+    if (lastMeaningful.length <= 12) return lastMeaningful
+  }
+
+  return trimmed.slice(0, 12)
 }
 
 function getSeasonSortValue(seasonLabel?: string | null) {
@@ -275,12 +316,12 @@ function resolveLeagueRecord(teamLeagueValue: string | null | undefined, leagues
   return (
     leagues.find((league) => String(league.id) === rawValue) ||
     leagues.find((league) =>
-      [league.name, league.abbreviation, league.short_name, league.display_name]
+      [league.name, league.display_name]
         .filter(Boolean)
         .some((value) => normalizeLookupValue(value) === normalizedValue)
     ) ||
     leagues.find((league) =>
-      [league.name, league.abbreviation, league.short_name, league.display_name]
+      [league.name, league.display_name]
         .filter(Boolean)
         .some((value) => {
           const normalizedLeagueValue = normalizeLookupValue(value)
@@ -483,8 +524,8 @@ export default function PlayerPage() {
         supabase.from('stats').select('*').eq('player_id', playerId),
         supabase.from('teams').select('id, name, logo_url, league'),
         supabase.from('seasons').select('id, name'),
-        supabase.from('matches').select('id, game_date'),
-        supabase.from('leagues').select('id, name, abbreviation, short_name, display_name, category'),
+        supabase.from('matches').select('*'),
+        supabase.from('leagues').select('id, name, display_name, category'),
         supabase.from('player_roles').select('id, name, description'),
         supabase.from('player_role_assignments').select('player_id, role_id').eq('player_id', playerId),
         supabase
@@ -701,9 +742,100 @@ export default function PlayerPage() {
   const effectiveCareerRole = showCareerRoleTabs ? careerRole : availableCareerRoles[0] || (isGoaliePosition(player.position) ? 'goalie' : 'skater')
   const isGoalie = effectiveCareerRole === 'goalie'
   const playerLeague = resolveLeagueRecord(primaryTeam?.league, leagues)
-  const playerLeagueLabel = playerLeague?.abbreviation || primaryTeam?.league || 'No League'
+  const playerLeagueLabel = playerLeague?.name || primaryTeam?.league || 'No League'
   const currentSeasonLabel = stats[0]?.season?.name || allStats[0]?.season?.name || ''
   const last10 = stats.slice(0, 10)
+  const teamsById = new Map(teamOptions.map((team) => [String(team.id), team]))
+  const visibleGameLog = stats
+    .filter((stat) => getStatRole(stat.position, player.position) === effectiveCareerRole)
+    .filter((stat) => {
+      return (
+        Boolean(stat.match_id) ||
+        Boolean(stat.match?.game_date) ||
+        Boolean(stat.team_id) ||
+        (Number(stat.gp) || 0) > 0
+      )
+    })
+  const gameLogRows = visibleGameLog.map((stat) => {
+    const match = stat.match
+    const team = stat.team || (stat.team_id ? teamsById.get(String(stat.team_id)) || null : null)
+    const isHome = team && match ? String(match.home_team_id) === String(team.id) : false
+    const opponentId =
+      team && match
+        ? isHome
+          ? match.visiting_team_id
+          : match.home_team_id
+        : null
+    const opponent = opponentId ? teamsById.get(String(opponentId)) || null : null
+    const matchupLabel = opponent
+      ? `${isHome ? 'vs' : '@'} ${opponent.name}`
+      : team?.name || '-'
+    const compactMatchupLabel = opponent ? getCompactTeamName(opponent.name) : getCompactTeamName(team?.name)
+    const goalsAgainst =
+      stat.goalie_goals_against !== null && stat.goalie_goals_against !== undefined
+        ? Number(stat.goalie_goals_against) || 0
+        : Math.max((Number(stat.gk_shots_against) || 0) - (Number(stat.gk_saves) || 0), 0)
+    const hasFinalScore =
+      match &&
+      match.home_score !== null &&
+      match.home_score !== undefined &&
+      match.visiting_score !== null &&
+      match.visiting_score !== undefined
+    const teamScore = hasFinalScore && match
+      ? isHome
+        ? Number(match.home_score) || 0
+        : Number(match.visiting_score) || 0
+      : null
+    const opponentScore = hasFinalScore && match
+      ? isHome
+        ? Number(match.visiting_score) || 0
+        : Number(match.home_score) || 0
+      : null
+    const result =
+      teamScore === null || opponentScore === null
+        ? 'pending'
+        : teamScore > opponentScore
+          ? 'win'
+          : teamScore < opponentScore
+            ? 'loss'
+            : 'draw'
+
+    return {
+      stat,
+      match,
+      team,
+      opponent,
+      isHome,
+      matchupLabel,
+      compactMatchupLabel,
+      goalsAgainst,
+      result,
+      score: formatMatchScore(match),
+      seasonLabel: stat.season?.name || '-',
+      typeLabel: formatGameTypeLabel(stat.game_type),
+    }
+  })
+  const gameLogSeasonOptions = Array.from(
+    new Set(gameLogRows.map((row) => row.seasonLabel).filter((value) => value && value !== '-'))
+  ).sort((a, b) => getSeasonSortValue(a) - getSeasonSortValue(b) || a.localeCompare(b))
+  const displayedGameLogRows = gameLogRows.slice(0, 8)
+  const gameLogSummary = displayedGameLogRows.reduce(
+    (acc, row) => {
+      acc.games += 1
+      if (row.result === 'win') acc.wins += 1
+      if (row.result === 'loss') acc.losses += 1
+      acc.goals += Number(row.stat.goals) || 0
+      acc.assists += Number(row.stat.assists) || 0
+      acc.points +=
+        row.stat.points !== null && row.stat.points !== undefined
+          ? Number(row.stat.points) || 0
+          : (Number(row.stat.goals) || 0) + (Number(row.stat.assists) || 0)
+      acc.saves += Number(row.stat.gk_saves) || 0
+      acc.shotsAgainst += Number(row.stat.gk_shots_against) || 0
+      return acc
+    },
+    { games: 0, wins: 0, losses: 0, goals: 0, assists: 0, points: 0, saves: 0, shotsAgainst: 0 }
+  )
   const visibleGrouped = grouped.filter(
     (group) => getStatRole(group.position, player.position) === effectiveCareerRole
   )
@@ -1220,33 +1352,137 @@ export default function PlayerPage() {
 
         <div style={sectionCard} className="motion-section-card motion-section-card-delay-2">
           <div style={sectionHeader}>GAME LOG</div>
-          <table style={table}>
+          <div style={gameLogPreviewBar}>
+            <div style={gameLogSummaryRow}>
+              <div style={gameLogSummaryItem}>
+                <span style={gameLogSummaryLabel}>Games</span>
+                <span style={gameLogSummaryValue}>{gameLogSummary.games}</span>
+              </div>
+              <div style={gameLogSummaryItem}>
+                <span style={gameLogSummaryLabel}>Record</span>
+                <span style={gameLogSummaryValue}>
+                  {gameLogSummary.wins}-{gameLogSummary.losses}
+                </span>
+              </div>
+              <div style={gameLogSummaryItem}>
+                <span style={gameLogSummaryLabel}>{isGoalie ? 'SV%' : 'PTS'}</span>
+                <span style={gameLogSummaryValue}>
+                  {isGoalie
+                    ? formatSavePct(gameLogSummary.saves, gameLogSummary.shotsAgainst)
+                    : gameLogSummary.points}
+                </span>
+              </div>
+            </div>
+            <Link href={`/player/${player.id}/gamelog`} style={gameLogMoreLink}>
+              Show More
+            </Link>
+          </div>
+          <table style={table} className="motion-table">
             <thead>
               <tr style={tableHead}>
                 <th style={thLeft}>Date</th>
-                <th style={thLeft}>Team</th>
-                <th style={thRight}>G</th>
-                <th style={thRight}>A</th>
-                <th style={thRight}>PTS</th>
+                <th style={thLeft}>Season</th>
+                <th style={thLeft}>Type</th>
+                <th style={thLeft}>Venue</th>
+                <th style={thLeft}>Matchup</th>
+                <th style={thLeft}>Result</th>
+                <th style={thRight}>GP</th>
+                {isGoalie ? (
+                  <>
+                    <th style={thRight}>W</th>
+                    <th style={thRight}>L</th>
+                    <th style={thRight}>OTL</th>
+                    <th style={thRight}>SVS</th>
+                    <th style={thRight}>SA</th>
+                    <th style={thRight}>SV%</th>
+                    <th style={thRight}>GAA</th>
+                  </>
+                ) : (
+                  <>
+                    <th style={thRight}>G</th>
+                    <th style={thRight}>A</th>
+                    <th style={thRight}>PTS</th>
+                    <th style={thRight}>+/-</th>
+                    <th style={thRight}>SOG</th>
+                    <th style={thRight}>TOI</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
-              {stats.slice(0, 8).map((stat) => (
-                <tr key={stat.id} style={tableRow}>
-                  <td style={tdLeft}>{formatDate(stat.match?.game_date)}</td>
-                  <td style={tdLeft}>
-                    <div style={teamCell}>
-                      {stat.team?.logo_url ? (
-                        <img src={stat.team.logo_url} alt={stat.team.name} style={teamLogo} />
-                      ) : null}
-                      <span>{stat.team?.name || '-'}</span>
-                    </div>
+              {displayedGameLogRows.length ? (
+                displayedGameLogRows.map((row) => {
+                  const { stat, match, team, opponent, compactMatchupLabel, goalsAgainst, result, seasonLabel, typeLabel, isHome } = row
+                  const venueLabel = match && row.team ? (isHome ? 'Home' : 'Away') : '-'
+                  return (
+                    <tr key={stat.id} style={tableRow}>
+                      <td style={tdLeft}>{formatDate(match?.game_date)}</td>
+                      <td style={tdLeft}>{seasonLabel}</td>
+                      <td style={tdLeft}>{typeLabel}</td>
+                      <td style={tdLeft}>{venueLabel}</td>
+                      <td style={tdLeft}>
+                        <div style={teamCell}>
+                          {opponent?.logo_url ? (
+                            <img src={opponent.logo_url} alt={opponent.name} style={teamLogo} />
+                          ) : team?.logo_url ? (
+                            <img src={team.logo_url} alt={team.name} style={teamLogo} />
+                          ) : null}
+                          {opponent?.id ? (
+                            <HoverPreviewLink href={`/team/${opponent.id}`} entityType="team" entityId={opponent.id} style={tableTeamLink}>
+                              {compactMatchupLabel}
+                            </HoverPreviewLink>
+                          ) : (
+                            <span>{compactMatchupLabel}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td style={tdLeft}>
+                        <span
+                          style={{
+                            ...gameLogResultBadge,
+                            ...(result === 'win'
+                              ? gameLogResultWin
+                              : result === 'loss'
+                                ? gameLogResultLoss
+                                : gameLogResultPending),
+                          }}
+                        >
+                          {result === 'win' ? 'W' : result === 'loss' ? 'L' : '-'} {formatMatchScore(match)}
+                        </span>
+                      </td>
+                      <td style={tdRight}>{stat.gp || 0}</td>
+                      {isGoalie ? (
+                        <>
+                          <td style={tdRight}>{stat.goalie_wins || 0}</td>
+                          <td style={tdRight}>{stat.goalie_losses || 0}</td>
+                          <td style={tdRight}>{stat.goalie_overtime_losses || 0}</td>
+                          <td style={tdRight}>{stat.gk_saves || 0}</td>
+                          <td style={tdRight}>{stat.gk_shots_against || 0}</td>
+                          <td style={tdRight}>
+                            {formatSavePct(Number(stat.gk_saves) || 0, Number(stat.gk_shots_against) || 0, stat.gk_percentage)}
+                          </td>
+                          <td style={tdRight}>{formatGaa(goalsAgainst, Number(stat.gp) || 0, Number(stat.toi) || 0)}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td style={tdRight}>{stat.goals || 0}</td>
+                          <td style={tdRight}>{stat.assists || 0}</td>
+                          <td style={ptsCell}>{stat.points || 0}</td>
+                          <td style={tdRight}>{formatPlusMinus(stat.plus_minus)}</td>
+                          <td style={tdRight}>{stat.shots || 0}</td>
+                          <td style={tdRight}>{stat.toi || 0}</td>
+                        </>
+                      )}
+                    </tr>
+                  )
+                })
+              ) : (
+                <tr style={tableRow}>
+                  <td style={tdLeft} colSpan={isGoalie ? 14 : 13}>
+                    No game log rows with linked match data yet.
                   </td>
-                  <td style={tdRight}>{stat.goals || 0}</td>
-                  <td style={tdRight}>{stat.assists || 0}</td>
-                  <td style={ptsCell}>{stat.points || 0}</td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -1391,7 +1627,7 @@ export default function PlayerPage() {
                     {group.teamLeague ? (
                       rowLeague ? (
                         <HoverPreviewLink href={`/league/${rowLeague.id}`} entityType="league" entityId={rowLeague.id} style={leagueLinkStyle}>
-                          {rowLeague.abbreviation || group.teamLeague}
+                          {rowLeague.name || group.teamLeague}
                         </HoverPreviewLink>
                       ) : (
                         <HoverPreviewLink href={`/league/${encodeURIComponent(group.teamLeague)}`} entityType="league" lookupValue={group.teamLeague} style={leagueLinkStyle}>
@@ -1504,7 +1740,7 @@ export default function PlayerPage() {
                   {totalRow.teamLeague ? (
                     totalRowLeague ? (
                       <HoverPreviewLink href={`/league/${totalRowLeague.id}`} entityType="league" entityId={totalRowLeague.id} style={leagueLinkStyle}>
-                        {totalRowLeague.abbreviation || totalRow.teamLeague}
+                        {totalRowLeague.name || totalRow.teamLeague}
                       </HoverPreviewLink>
                     ) : (
                       <HoverPreviewLink href={`/league/${encodeURIComponent(totalRow.teamLeague)}`} entityType="league" lookupValue={totalRow.teamLeague} style={leagueLinkStyle}>
@@ -2228,6 +2464,89 @@ const sectionHeader = {
   textTransform: 'uppercase' as const,
   letterSpacing: '-0.02em',
   lineHeight: 1.1,
+}
+
+const gameLogPreviewBar = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 14,
+  padding: '12px 14px 10px',
+  borderBottom: '1px solid #edf1f5',
+  flexWrap: 'wrap' as const,
+  background: '#f8fbfd',
+}
+
+const gameLogSummaryRow = {
+  display: 'flex',
+  gap: 10,
+  flexWrap: 'wrap' as const,
+}
+
+const gameLogSummaryItem = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '7px 10px',
+  borderRadius: 999,
+  background: '#e9f1f7',
+  border: '1px solid #d8e2ea',
+}
+
+const gameLogSummaryLabel = {
+  color: '#607182',
+  fontSize: 11,
+  fontWeight: 700,
+  textTransform: 'uppercase' as const,
+}
+
+const gameLogSummaryValue = {
+  color: '#102f47',
+  fontSize: 12,
+  fontWeight: 800,
+}
+
+const gameLogMoreLink = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minHeight: 32,
+  padding: '0 14px',
+  borderRadius: 999,
+  background: '#29ae51',
+  color: '#fff',
+  textDecoration: 'none',
+  fontSize: 12,
+  fontWeight: 800,
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.03em',
+}
+
+const gameLogResultBadge = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  minHeight: 26,
+  padding: '0 10px',
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: 800,
+  whiteSpace: 'nowrap' as const,
+}
+
+const gameLogResultWin = {
+  background: '#e7f7ec',
+  color: '#18723a',
+}
+
+const gameLogResultLoss = {
+  background: '#fbe9ea',
+  color: '#b4232d',
+}
+
+const gameLogResultPending = {
+  background: '#eef3f7',
+  color: '#607182',
 }
 
 const factsGrid = {

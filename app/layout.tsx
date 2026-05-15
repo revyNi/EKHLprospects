@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabaseClient'
 import { loadAdminStatus } from '../lib/adminClient'
 import AnimatedNumber from '../components/AnimatedNumber'
 
-type AdminPanelType = 'player' | 'stats' | 'league' | 'team' | 'standings' | 'match' | 'role' | null
+type AdminPanelType = 'player' | 'stats' | 'league' | 'team' | 'standings' | 'match' | 'role' | 'import' | null
 
 type AdminPlayerOption = {
   id: string
@@ -29,13 +29,14 @@ type AdminSeasonOption = {
 type AdminLeagueOption = {
   id: string
   name: string
-  abbreviation?: string | null
+  short_name?: string | null
   logo_url?: string | null
 }
 
 type SearchPlayerOption = {
   id: string
   name: string
+  display_name?: string | null
   position?: string | null
   nationality?: string | null
   image_url?: string | null
@@ -51,7 +52,7 @@ type SearchTeamOption = {
 type SearchLeagueOption = {
   id: string
   name: string
-  abbreviation?: string | null
+  short_name?: string | null
   country_code?: string | null
   logo_url?: string | null
   image_url?: string | null
@@ -89,6 +90,12 @@ type SidebarDatabasePlayer = {
   name: string
   nationality?: string | null
   created_at?: string | null
+}
+
+type TopPlayerSearchRecord = {
+  player: SearchPlayerOption
+  count: number
+  updated_at: number
 }
 
 type AdminPlayerForm = {
@@ -215,11 +222,23 @@ type AdminRoleForm = {
   description: string
 }
 
+type AdminImportForm = {
+  league_id: string
+  season_id: string
+  stats_sheet_url: string
+  matches_sheet_url: string
+}
+
 const pages = [
   { name: 'Home', href: '/' },
   { name: 'Teams', href: '/team' },
   { name: 'Leagues', href: '/league' },
   { name: 'Awards', href: '/awards' },
+]
+
+const subnavPages = [
+  { name: 'Lineup Creator', href: '/lineup-creator', iconClassName: 'global-subnav-icon-rink' },
+  { name: 'Player Comparisons', href: '/player-comparisons', iconClassName: 'global-subnav-icon-players' },
 ]
 
 const emptyPlayerForm = (): AdminPlayerForm => ({
@@ -326,6 +345,13 @@ const emptyRoleForm = (): AdminRoleForm => ({
   description: '',
 })
 
+const emptyImportForm = (): AdminImportForm => ({
+  league_id: '',
+  season_id: '',
+  stats_sheet_url: '',
+  matches_sheet_url: '',
+})
+
 function toNullableNumber(value: string) {
   return value.trim() ? Number(value) : null
 }
@@ -342,6 +368,45 @@ function normalizeLeagueLookup(value?: string | null) {
 function normalizeImageUrl(value?: string | null) {
   const trimmed = value?.trim()
   return trimmed ? trimmed : null
+}
+
+function normalizeSearchText(value?: string | null) {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+const TOP_PLAYER_SEARCHES_KEY = 'ep-top-player-searches'
+
+function loadTopPlayerSearches() {
+  if (typeof window === 'undefined') return [] as TopPlayerSearchRecord[]
+
+  try {
+    const rawValue = window.localStorage.getItem(TOP_PLAYER_SEARCHES_KEY)
+    if (!rawValue) return []
+
+    const parsedValue = JSON.parse(rawValue) as TopPlayerSearchRecord[]
+    if (!Array.isArray(parsedValue)) return []
+
+    return parsedValue
+      .filter((entry) => entry?.player?.id && entry?.player?.name)
+      .sort((a, b) => b.count - a.count || b.updated_at - a.updated_at)
+      .slice(0, 12)
+  } catch {
+    return []
+  }
+}
+
+function saveTopPlayerSearches(entries: TopPlayerSearchRecord[]) {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.localStorage.setItem(TOP_PLAYER_SEARCHES_KEY, JSON.stringify(entries.slice(0, 12)))
+  } catch {
+    // Ignore storage errors to keep search usable.
+  }
 }
 
 const nationalityToCode: Record<string, string> = {
@@ -399,6 +464,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [standingsForm, setStandingsForm] = useState<AdminStandingsForm>(emptyStandingsForm)
   const [matchForm, setMatchForm] = useState<AdminMatchForm>(emptyMatchForm)
   const [roleForm, setRoleForm] = useState<AdminRoleForm>(emptyRoleForm)
+  const [importForm, setImportForm] = useState<AdminImportForm>(emptyImportForm)
   const [adminMatches, setAdminMatches] = useState<AdminMatchOption[]>([])
   const [adminRoles, setAdminRoles] = useState<AdminRoleRecord[]>([])
   const [searchValue, setSearchValue] = useState('')
@@ -406,6 +472,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [searchPlayers, setSearchPlayers] = useState<SearchPlayerOption[]>([])
   const [searchTeams, setSearchTeams] = useState<SearchTeamOption[]>([])
   const [searchLeagues, setSearchLeagues] = useState<SearchLeagueOption[]>([])
+  const [topPlayerSearches, setTopPlayerSearches] = useState<TopPlayerSearchRecord[]>([])
   const [leaderPlayers, setLeaderPlayers] = useState<SidebarPlayerOption[]>([])
   const [leaderTeams, setLeaderTeams] = useState<SearchTeamOption[]>([])
   const [leaderStats, setLeaderStats] = useState<SidebarStatRecord[]>([])
@@ -604,19 +671,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       ] = await Promise.all([
         supabase
           .from('players')
-          .select('id, name, position, nationality, image_url')
-          .order('name', { ascending: true })
-          .limit(24),
+          .select('id, name, display_name, position, nationality, image_url')
+          .order('name', { ascending: true }),
         supabase
           .from('teams')
           .select('id, name, logo_url, league')
-          .order('name', { ascending: true })
-          .limit(24),
+          .order('name', { ascending: true }),
         supabase
           .from('leagues')
-          .select('id, name, abbreviation, country_code, logo_url, image_url')
-          .order('name', { ascending: true })
-          .limit(48),
+          .select('id, name, country_code, logo_url, image_url')
+          .order('name', { ascending: true }),
       ])
 
       setSearchPlayers((playersData as SearchPlayerOption[]) || [])
@@ -625,6 +689,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     }
 
     fetchSearchOptions()
+  }, [])
+
+  useEffect(() => {
+    setTopPlayerSearches(loadTopPlayerSearches())
   }, [])
 
   useEffect(() => {
@@ -688,6 +756,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     if (panel === 'team') setTeamForm(emptyTeamForm())
     if (panel === 'standings') setStandingsForm(emptyStandingsForm())
     if (panel === 'role') setRoleForm(emptyRoleForm())
+    if (panel === 'import') setImportForm(emptyImportForm())
     if (panel === 'match') {
       setMatchForm(emptyMatchForm())
       setAdminMatches([])
@@ -701,19 +770,19 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     setAdminIsSaving(false)
   }
 
-  const normalizedSearch = searchValue.trim().toLowerCase()
+  const normalizedSearch = normalizeSearchText(searchValue)
   const playerMatches = normalizedSearch
     ? searchPlayers.filter((player) =>
-        [player.name, player.position, player.nationality]
+        [player.name, player.display_name, player.position, player.nationality]
           .filter(Boolean)
-          .some((value) => String(value).toLowerCase().includes(normalizedSearch))
+          .some((value) => normalizeSearchText(String(value)).includes(normalizedSearch))
       )
     : []
   const teamMatches = normalizedSearch
     ? searchTeams.filter((team) =>
         [team.name, team.league]
           .filter(Boolean)
-          .some((value) => String(value).toLowerCase().includes(normalizedSearch))
+          .some((value) => normalizeSearchText(String(value)).includes(normalizedSearch))
       )
     : []
   const fallbackLeagueOptions: SearchLeagueOption[] = Array.from(
@@ -721,7 +790,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
   ).map((leagueName) => {
     const normalizedLeagueName = normalizeLeagueLookup(String(leagueName))
     const matchedSearchLeague = searchLeagues.find((league) =>
-      [league.name, league.abbreviation]
+      [league.name]
         .filter(Boolean)
         .some((value) => {
           const normalizedValue = normalizeLeagueLookup(String(value))
@@ -733,7 +802,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
         })
     )
     const matchedAdminLeague = adminLeagues.find((league) =>
-      [league.name, league.abbreviation]
+      [league.name]
         .filter(Boolean)
         .some((value) => {
           const normalizedValue = normalizeLeagueLookup(String(value))
@@ -749,7 +818,6 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
       return {
         id: matchedSearchLeague.id,
         name: matchedSearchLeague.name,
-        abbreviation: matchedSearchLeague.abbreviation || null,
         country_code: matchedSearchLeague.country_code || null,
         logo_url: matchedSearchLeague.logo_url || null,
         image_url: matchedSearchLeague.image_url || null,
@@ -761,7 +829,6 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
       return {
         id: matchedAdminLeague.id,
         name: matchedAdminLeague.name,
-        abbreviation: matchedAdminLeague.abbreviation || null,
         country_code: null,
         logo_url: null,
         image_url: null,
@@ -772,7 +839,6 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     return {
       id: String(leagueName),
       name: String(leagueName),
-      abbreviation: null,
       country_code: null,
       logo_url: null,
       image_url: null,
@@ -789,7 +855,6 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
       ? adminLeagues.map((league) => ({
           id: league.id,
           name: league.name,
-          abbreviation: league.abbreviation || null,
           country_code: null,
           logo_url: normalizeImageUrl(league.logo_url),
           image_url: null,
@@ -804,7 +869,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
   const activeLeaderLeague = sidebarLeagueOptions.find((league) => league.id === activeLeaderLeagueId) || null
   const leaderShowMoreHref = activeLeaderLeague
     ? `/league/${encodeURIComponent(activeLeaderLeague.id)}/stats?tab=allTime&context=${encodeURIComponent(
-        `${activeLeaderLeague.abbreviation || activeLeaderLeague.name} Top Scorers`
+        `${activeLeaderLeague.name} Top Scorers`
       )}`
     : '#'
   const leaderPlayersById = new Map(leaderPlayers.map((player) => [String(player.id), player]))
@@ -817,7 +882,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
 
       if (activeLeaderLeague) {
         const normalizedTeamLeague = normalizeLeagueLookup(team.league)
-        const matchesLeague = [activeLeaderLeague.name, activeLeaderLeague.abbreviation]
+        const matchesLeague = [activeLeaderLeague.name]
           .filter(Boolean)
           .some((value) => {
             const normalizedLeagueValue = normalizeLeagueLookup(String(value))
@@ -868,9 +933,9 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
   }, [selectedLeaderLeague, sidebarLeagueOptions])
   const leagueMatches = normalizedSearch
     ? resolvedLeagueOptions.filter((league) =>
-        [league.name, league.abbreviation]
+        [league.name]
           .filter(Boolean)
-          .some((value) => String(value).toLowerCase().includes(normalizedSearch))
+          .some((value) => normalizeSearchText(String(value)).includes(normalizedSearch))
       )
     : []
   const popularLeagueOptions: SearchLeagueOption[] = searchLeagues.length
@@ -883,13 +948,18 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
       ? adminLeagues.map((league) => ({
           id: league.id,
           name: league.name,
-          abbreviation: league.abbreviation || null,
           country_code: null,
           logo_url: normalizeImageUrl(league.logo_url),
           image_url: null,
           href: `/league/${league.id}`,
         }))
       : fallbackLeagueOptions
+  const topPlayerSearchCards = [
+    ...topPlayerSearches.map((entry) => entry.player),
+    ...searchPlayers.filter(
+      (player) => !topPlayerSearches.some((entry) => entry.player.id === player.id)
+    ),
+  ].slice(0, 4)
 
   const legacyCombinedMatches = [
     ...playerMatches.slice(0, 4).map((player) => ({
@@ -912,7 +982,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
       id: `league-${league.id}`,
       href: `/league/${league.id}`,
       title: league.name,
-      subtitle: league.abbreviation || 'League',
+      subtitle: 'League',
       kind: 'League',
       imageUrl: getSearchFlagUrl(league.country_code),
     })),
@@ -939,16 +1009,49 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     id: `league-${league.id}`,
     href: league.href || `/league/${league.id}`,
     title: league.name,
-    subtitle: league.abbreviation ? `${league.abbreviation} • League` : 'League',
+    subtitle: 'League',
     kind: 'League',
     imageUrl: league.logo_url || league.image_url || getSearchFlagUrl(league.country_code),
   }))
   const combinedMatches = [...playerSearchResults, ...teamSearchResults, ...leagueSearchResults]
 
+  function trackPlayerSearch(player: SearchPlayerOption) {
+    const nextEntries = (() => {
+      const currentEntries = loadTopPlayerSearches()
+      const existingEntry = currentEntries.find((entry) => entry.player.id === player.id)
+      const updatedEntry: TopPlayerSearchRecord = {
+        player,
+        count: (existingEntry?.count || 0) + 1,
+        updated_at: Date.now(),
+      }
+
+      return [
+        updatedEntry,
+        ...currentEntries.filter((entry) => entry.player.id !== player.id),
+      ]
+        .sort((a, b) => b.count - a.count || b.updated_at - a.updated_at)
+        .slice(0, 12)
+    })()
+
+    setTopPlayerSearches(nextEntries)
+    saveTopPlayerSearches(nextEntries)
+  }
+
+  function openPlayerSearchResult(player: SearchPlayerOption) {
+    trackPlayerSearch(player)
+    router.push(`/player/${player.id}`)
+    setIsSearchOpen(false)
+  }
+
   function submitGlobalSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     if (!combinedMatches.length) return
+
+    if (playerMatches.length) {
+      openPlayerSearchResult(playerMatches[0])
+      return
+    }
 
     router.push(combinedMatches[0].href)
     setIsSearchOpen(false)
@@ -980,7 +1083,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     const { data, error } = await supabase
       .from('players')
       .insert(payload)
-      .select('id, name, nationality, position, image_url')
+      .select('id, name, display_name, nationality, position, image_url')
       .single()
 
     if (error) {
@@ -993,6 +1096,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
       | {
           id: string
           name: string
+          display_name?: string | null
           nationality?: string | null
           position?: string | null
           image_url?: string | null
@@ -1012,6 +1116,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
           {
             id: insertedPlayer.id,
             name: insertedPlayer.name,
+            display_name: insertedPlayer.display_name || null,
             position: insertedPlayer.position || null,
             nationality: insertedPlayer.nationality || null,
             image_url: insertedPlayer.image_url || null,
@@ -1019,9 +1124,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
           ...current.filter((player) => player.id !== insertedPlayer.id),
         ]
 
-        return next
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .slice(0, 24)
+        return next.sort((a, b) => a.name.localeCompare(b.name))
       })
       setLeaderPlayers((current) => {
         const next = [
@@ -1115,8 +1218,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     const payload = {
       name: leagueForm.name.trim(),
       display_name: leagueForm.display_name.trim() || null,
-      abbreviation: leagueForm.abbreviation.trim() || null,
-      short_name: leagueForm.short_name.trim() || null,
+      short_name: leagueForm.short_name.trim() || leagueForm.abbreviation.trim() || null,
       logo_url: leagueForm.logo_url.trim() || null,
       category: leagueForm.category,
       region: leagueForm.region.trim() || null,
@@ -1313,6 +1415,86 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
     setAdminIsSaving(false)
   }
 
+  async function saveImportForm() {
+    if (!importForm.league_id || !importForm.season_id) {
+      setAdminSaveMessage('Select a league and season first.')
+      return
+    }
+
+    if (!importForm.stats_sheet_url.trim() && !importForm.matches_sheet_url.trim()) {
+      setAdminSaveMessage('Paste at least one Google Sheet link.')
+      return
+    }
+
+    setAdminIsSaving(true)
+    setAdminSaveMessage('')
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      setAdminSaveMessage('You need to be signed in as an admin to import sheets.')
+      setAdminIsSaving(false)
+      return
+    }
+
+    const response = await fetch('/api/admin/import-sheet', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        leagueId: importForm.league_id,
+        seasonId: importForm.season_id,
+        statsSheetUrl: importForm.stats_sheet_url,
+        matchesSheetUrl: importForm.matches_sheet_url,
+      }),
+    })
+
+    const data = (await response.json().catch(() => null)) as
+      | {
+          error?: string
+          message?: string
+          summary?: {
+            stats?: { parsed: number; matched: number; created: number; updated: number; skipped: number; warnings?: string[] }
+            matches?: { parsed: number; matched: number; created: number; updated: number; skipped: number; warnings?: string[] }
+          }
+        }
+      | null
+
+    if (!response.ok) {
+      setAdminSaveMessage(data?.error || 'Sheet import failed.')
+      setAdminIsSaving(false)
+      return
+    }
+
+    const statsSummary = data?.summary?.stats
+    const matchesSummary = data?.summary?.matches
+
+    setAdminSaveMessage(
+      [
+        data?.message || 'Sheet import finished.',
+        statsSummary
+          ? `Stats: ${statsSummary.matched}/${statsSummary.parsed} matched, +${statsSummary.created} new, ${statsSummary.updated} updated, ${statsSummary.skipped} skipped.`
+          : null,
+        matchesSummary
+          ? `Matches: ${matchesSummary.matched}/${matchesSummary.parsed} matched, +${matchesSummary.created} new, ${matchesSummary.updated} updated, ${matchesSummary.skipped} skipped.`
+          : null,
+        statsSummary?.warnings?.length
+          ? `Stats warnings: ${statsSummary.warnings.slice(0, 2).join(' | ')}`
+          : null,
+        matchesSummary?.warnings?.length
+          ? `Match warnings: ${matchesSummary.warnings.slice(0, 2).join(' | ')}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' ')
+    )
+    setAdminIsSaving(false)
+  }
+
   async function saveRoleForm() {
     setAdminIsSaving(true)
     setAdminSaveMessage('')
@@ -1461,9 +1643,33 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                     <button type="button" style={adminMenuItem} className="global-admin-item" onClick={() => openAdminPanel('match')}>
                       Add/Update Match
                     </button>
+                    <button type="button" style={adminMenuItem} className="global-admin-item" onClick={() => openAdminPanel('import')}>
+                      Import Google Sheet
+                    </button>
                   </div>
                 ) : null}
               </div> : null}
+            </div>
+          </div>
+
+          <div className="global-subnav-shell">
+            <div className="global-subnav-inner">
+              {subnavPages.map((page) => {
+                const isActive =
+                  pathname === page.href ||
+                  pathname?.startsWith(page.href + '/')
+
+                return (
+                  <Link
+                    key={page.name}
+                    href={page.href}
+                    className={`global-subnav-link${isActive ? ' global-subnav-link-active' : ''}`}
+                  >
+                    <span className={`global-subnav-icon ${page.iconClassName}`} aria-hidden="true" />
+                    <span>{page.name}</span>
+                  </Link>
+                )
+              })}
             </div>
           </div>
 
@@ -1522,7 +1728,15 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                                   key={result.id}
                                   href={result.href}
                                   className="global-search-result"
-                                  onClick={() => setIsSearchOpen(false)}
+                                  onClick={(event) => {
+                                    event.preventDefault()
+                                    const matchedPlayer = playerMatches.find(
+                                      (player) => `player-${player.id}` === result.id
+                                    )
+                                    if (matchedPlayer) {
+                                      openPlayerSearchResult(matchedPlayer)
+                                    }
+                                  }}
                                 >
                                   <div className="global-search-result-thumb">
                                     {result.imageUrl ? (
@@ -1620,12 +1834,15 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                       <div>
                         <div className="global-search-heading">Top Player Searches</div>
                         <div className="global-search-card-row">
-                          {searchPlayers.slice(0, 4).map((player) => (
+                          {topPlayerSearchCards.map((player) => (
                             <Link
                               key={player.id}
                               href={`/player/${player.id}`}
                               className="global-search-card"
-                              onClick={() => setIsSearchOpen(false)}
+                              onClick={(event) => {
+                                event.preventDefault()
+                                openPlayerSearchResult(player)
+                              }}
                             >
                               {player.image_url ? (
                                 <img
@@ -1644,7 +1861,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                                   {player.name} {player.position ? `(${player.position})` : ''}
                                 </span>
                                 <span className="global-search-card-subtitle">
-                                  {player.nationality || 'Player'}
+                                  {player.nationality || player.display_name || 'Player'}
                                 </span>
                               </div>
                             </Link>
@@ -1677,18 +1894,16 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                                   />
                                 ) : (
                                   <span className="global-search-list-initial">
-                                    {(league.abbreviation || league.name).slice(0, 1)}
+                                    {league.name.slice(0, 1)}
                                   </span>
                                 )}
                               </div>
                               <div className="global-search-list-copy">
                                 <span className="global-search-list-title">
-                                  {league.abbreviation || league.name}
+                                  {league.name}
                                 </span>
                                 <span className="global-search-list-subtitle">
-                                  {league.name !== league.abbreviation && league.abbreviation
-                                    ? league.name
-                                    : 'League'}
+                                  {'League'}
                                 </span>
                               </div>
                             </Link>
@@ -1772,7 +1987,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                   >
                     {sidebarLeagueOptions.map((league) => (
                       <option key={league.id} value={league.id}>
-                        {league.abbreviation || league.name}
+                        {league.name}
                       </option>
                     ))}
                   </select>
@@ -1846,6 +2061,8 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                     ? 'Add Player'
                     : activeAdminPanel === 'stats'
                       ? 'Add Roster/Stats'
+                      : activeAdminPanel === 'import'
+                        ? 'Import Google Sheet'
                       : activeAdminPanel === 'role'
                         ? 'Add/Update Player Roles'
                       : activeAdminPanel === 'standings'
@@ -2021,6 +2238,75 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                     <label style={fieldWrap}><span style={fieldLabel}>Goalie OTL</span><input value={statsForm.goalie_overtime_losses} onChange={(event) => setStatsForm((current) => ({ ...current, goalie_overtime_losses: event.target.value }))} style={fieldInput} /></label>
                     <label style={fieldWrap}><span style={fieldLabel}>Shutouts</span><input value={statsForm.goalie_shutouts} onChange={(event) => setStatsForm((current) => ({ ...current, goalie_shutouts: event.target.value }))} style={fieldInput} /></label>
                     <label style={fieldWrap}><span style={fieldLabel}>Goals Against</span><input value={statsForm.goalie_goals_against} onChange={(event) => setStatsForm((current) => ({ ...current, goalie_goals_against: event.target.value }))} style={fieldInput} /></label>
+                  </div>
+                </div>
+              ) : null}
+
+              {!adminIsLoading && activeAdminPanel === 'import' ? (
+                <div style={modalBody}>
+                  <div style={formGrid}>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>League</span>
+                      <select
+                        value={importForm.league_id}
+                        onChange={(event) =>
+                          setImportForm((current) => ({ ...current, league_id: event.target.value }))
+                        }
+                        style={fieldInput}
+                      >
+                        <option value="">Select league</option>
+                        {adminLeagues.map((league) => (
+                          <option key={league.id} value={league.id}>
+                            {league.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={fieldWrap}>
+                      <span style={fieldLabel}>Season</span>
+                      <select
+                        value={importForm.season_id}
+                        onChange={(event) =>
+                          setImportForm((current) => ({ ...current, season_id: event.target.value }))
+                        }
+                        style={fieldInput}
+                      >
+                        <option value="">Select season</option>
+                        {adminSeasons.map((season) => (
+                          <option key={season.id} value={season.id}>
+                            {season.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ ...fieldWrap, gridColumn: '1 / -1' }}>
+                      <span style={fieldLabel}>Stats Sheet Link</span>
+                      <input
+                        value={importForm.stats_sheet_url}
+                        onChange={(event) =>
+                          setImportForm((current) => ({ ...current, stats_sheet_url: event.target.value }))
+                        }
+                        placeholder="Paste a Google Sheet tab link or CSV export URL"
+                        style={fieldInput}
+                      />
+                    </label>
+                    <label style={{ ...fieldWrap, gridColumn: '1 / -1' }}>
+                      <span style={fieldLabel}>Results Sheet Link</span>
+                      <input
+                        value={importForm.matches_sheet_url}
+                        onChange={(event) =>
+                          setImportForm((current) => ({ ...current, matches_sheet_url: event.target.value }))
+                        }
+                        placeholder="Paste a Google Sheet tab link or CSV export URL"
+                        style={fieldInput}
+                      />
+                    </label>
+                    <div style={{ ...helperText, gridColumn: '1 / -1' }}>
+                      Use one sheet, two sheets, or only one of the links. For stats, you can paste the main Google Sheet link and the importer will try to detect tabs named like Regular Season or Playoffs automatically.
+                    </div>
+                    <div style={{ ...helperText, gridColumn: '1 / -1' }}>
+                      Stats rows should include player/team names plus season totals. Results rows should include date, home team, visiting team, and optionally scores, status, venue, and attendance.
+                    </div>
                   </div>
                 </div>
               ) : null}
@@ -2576,6 +2862,8 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                       ? savePlayerForm
                       : activeAdminPanel === 'stats'
                         ? saveStatsForm
+                        : activeAdminPanel === 'import'
+                          ? saveImportForm
                         : activeAdminPanel === 'role'
                           ? saveRoleForm
                         : activeAdminPanel === 'standings'
@@ -2956,6 +3244,12 @@ const fieldTextarea: React.CSSProperties = {
   background: '#fff',
   resize: 'vertical',
   fontFamily: 'inherit',
+}
+
+const helperText: React.CSSProperties = {
+  fontSize: 13,
+  lineHeight: 1.55,
+  color: '#5f7383',
 }
 
 const modalFooter: React.CSSProperties = {

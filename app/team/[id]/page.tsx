@@ -24,8 +24,6 @@ type TeamRecord = {
 type LeagueRecord = {
   id: string
   name: string
-  abbreviation?: string | null
-  short_name?: string | null
   display_name?: string | null
   country_code?: string | null
 }
@@ -385,7 +383,7 @@ export default function TeamPage() {
 
       const { data: leaguesData } = await supabase
         .from('leagues')
-        .select('id, name, abbreviation, short_name, display_name, country_code')
+        .select('id, name, display_name, country_code')
 
       setLeagueRecords((leaguesData as LeagueRecord[]) || [])
 
@@ -627,7 +625,7 @@ export default function TeamPage() {
 
     return (
       leagueRecords.find((league) =>
-        [league.name, league.abbreviation, league.short_name, league.display_name]
+        [league.name, league.display_name]
           .filter(Boolean)
           .some((value) => normalizeLeagueLookup(value) === normalizedLeague)
       ) || null
