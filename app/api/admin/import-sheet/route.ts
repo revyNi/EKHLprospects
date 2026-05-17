@@ -7,6 +7,7 @@ type ImportSheetRequest = {
   leagueId?: string
   seasonId?: string
   statsSheetUrl?: string
+  backlogSheetUrl?: string
   matchesSheetUrl?: string
 }
 
@@ -133,6 +134,72 @@ function isInvalidGeneratedTeamName(value?: string | null) {
     normalizedValue.includes('playoffs') ||
     normalizedValue.includes('gamestats') ||
     normalizedValue.includes('playoffstats')
+  )
+}
+
+function isLikelyStatsTeamMarker(value?: string | null) {
+  const trimmed = (value || '').trim()
+  const normalizedValue = normalizeLookupValue(trimmed)
+  const invalidMarkers = new Set([
+    'team',
+    'rating',
+    'logo',
+    'player',
+    'playername',
+    'playerusername',
+    'username',
+    'userid',
+    'robloxuserid',
+    'gp',
+    'g',
+    'a',
+    'p',
+    'pts',
+    'franchise',
+    'average',
+    'elite',
+    'low',
+    'mta',
+    'notfound',
+    'unknown',
+  ])
+
+  return Boolean(
+    normalizedValue &&
+      !isInvalidGeneratedTeamName(trimmed) &&
+      !invalidMarkers.has(normalizedValue) &&
+      !/^\d+$/.test(normalizedValue)
+  )
+}
+
+function extractSheetImageValue(value?: string | null) {
+  const trimmed = (value || '').trim()
+  if (!trimmed) return ''
+
+  const imageFormulaMatch = trimmed.match(/IMAGE\(\s*["']([^"']+)["']/i)
+  return (imageFormulaMatch?.[1] || trimmed).trim()
+}
+
+function getLogoLookupKeys(value?: string | null) {
+  const imageValue = extractSheetImageValue(value)
+  if (!imageValue) return [] as string[]
+
+  let decodedValue = imageValue
+  try {
+    decodedValue = decodeURIComponent(imageValue)
+  } catch {
+    decodedValue = imageValue
+  }
+
+  const withoutQuery = decodedValue.replace(/[?#].*$/, '')
+  const fileName = withoutQuery.split('/').pop() || ''
+  const fileStem = fileName.replace(/\.[a-z0-9]+$/i, '')
+
+  return uniqueBy(
+    [imageValue, decodedValue, withoutQuery, fileName, fileStem]
+      .map((candidate) => normalizeLookupValue(candidate))
+      .filter(Boolean),
+    (candidate) => candidate
   )
 }
 
@@ -278,7 +345,17 @@ async function resolveStatsSheetSources(rawStatsSheetUrl: string) {
   )
 }
 
-async function resolveBacklogSheetSources(rawStatsSheetUrl: string) {
+async function resolveBacklogSheetSources(rawStatsSheetUrl: string, rawBacklogSheetUrl?: string | null) {
+  const explicitBacklogSheetUrl = (rawBacklogSheetUrl || '').trim()
+  if (explicitBacklogSheetUrl) {
+    return [
+      {
+        url: normalizeSheetUrl(explicitBacklogSheetUrl),
+        label: 'Backlog Sheet',
+      },
+    ] as GenericSheetSource[]
+  }
+
   const trimmed = rawStatsSheetUrl.trim()
   if (!trimmed.includes('docs.google.com/spreadsheets/d/')) {
     return [] as GenericSheetSource[]
@@ -387,13 +464,28 @@ function parseCsv(text: string) {
     }
   })
 
-  const headers = headerCandidateRows[bestHeaderIndex] || rows[0].map((cell) => cell.trim())
+  const headers = [...(headerCandidateRows[bestHeaderIndex] || rows[0].map((cell) => cell.trim()))]
+  const hasTeamHeader = headers.some((header) => normalizeLookupValue(header) === 'team')
+  const firstStatsHeaderIndex = headers.findIndex((header) =>
+    ['gp', 'w', 'wins', 'pts'].includes(normalizeLookupValue(header))
+  )
+
+  if (!hasTeamHeader && firstStatsHeaderIndex > 0 && !headers[firstStatsHeaderIndex - 1]?.trim()) {
+    headers[firstStatsHeaderIndex - 1] = 'Team'
+  }
+
   const dataRows = rows.slice(bestHeaderIndex + 1)
 
   return dataRows.map((row) => {
     const entry: CsvRow = {}
     headers.forEach((header, index) => {
-      entry[header] = row[index]?.trim() || ''
+      const normalizedHeader = header.trim()
+      if (!normalizedHeader) return
+
+      const value = row[index]?.trim() || ''
+      if (entry[normalizedHeader] === undefined || (!entry[normalizedHeader] && value)) {
+        entry[normalizedHeader] = value
+      }
     })
     return entry
   })
@@ -591,13 +683,14 @@ export async function POST(request: Request) {
   const leagueId = payload.leagueId?.trim()
   const seasonId = payload.seasonId?.trim()
   const rawStatsSheetUrl = payload.statsSheetUrl?.trim() || ''
+  const rawBacklogSheetUrl = payload.backlogSheetUrl?.trim() || ''
   const matchesSheetUrl = normalizeSheetUrl(payload.matchesSheetUrl)
 
   if (!leagueId || !seasonId) {
     return NextResponse.json({ error: 'League and season are required.' }, { status: 400 })
   }
 
-  if (!rawStatsSheetUrl && !matchesSheetUrl) {
+  if (!rawStatsSheetUrl && !rawBacklogSheetUrl && !matchesSheetUrl) {
     return NextResponse.json({ error: 'Provide at least one sheet link.' }, { status: 400 })
   }
 
@@ -641,7 +734,16 @@ export async function POST(request: Request) {
 
   const playerLookup = buildLookupMap(players, [(player) => player.display_name])
   const teamLookup = buildLookupMap(teams)
+  const teamLogoLookup = new Map<string, SearchTeam>()
   const robloxUserLookupCache = new Map<string, RobloxUserLookup | null>()
+
+  teams.forEach((team) => {
+    getLogoLookupKeys(team.logo_url).forEach((logoKey) => {
+      if (!teamLogoLookup.has(logoKey)) {
+        teamLogoLookup.set(logoKey, team)
+      }
+    })
+  })
 
   function resolveExistingTeam(teamName?: string | null) {
     const trimmedTeamName = (teamName || '').trim()
@@ -656,6 +758,24 @@ export async function POST(request: Request) {
       teamLookup.get(normalizedTeamName) || findFuzzyMatch(trimmedTeamName, teams)
 
     return existingTeam || null
+  }
+
+  function resolveExistingTeamLogo(logoValue?: string | null) {
+    const logoKeys = getLogoLookupKeys(logoValue)
+    for (const logoKey of logoKeys) {
+      const team = teamLogoLookup.get(logoKey)
+      if (team) return team
+    }
+
+    return null
+  }
+
+  function getStatsRowTeamMarker(row: CsvRow) {
+    return (
+      getCell(row, ['team key', 'teamkey', 'franchise key', 'franchisekey']) ||
+      getCell(row, ['team', 'team name', 'team_name', 'club', 'franchise', 'franchise name']) ||
+      getCell(row, ['logo', 'team logo', 'team_logo', 'franchise logo', 'franchise_logo', 'image'])
+    )
   }
 
   const responseSummary = {
@@ -679,7 +799,7 @@ export async function POST(request: Request) {
 
   if (rawStatsSheetUrl) {
     const statsSheetSources = await resolveStatsSheetSources(rawStatsSheetUrl)
-    const backlogSheetSources = await resolveBacklogSheetSources(rawStatsSheetUrl)
+    const backlogSheetSources = await resolveBacklogSheetSources(rawStatsSheetUrl, rawBacklogSheetUrl)
     const matchedRows: Array<Record<string, string | number | null>> = []
     const matchedPlayerIds = new Set<string>()
     const matchedTeamIds = new Set<string>()
@@ -731,7 +851,11 @@ export async function POST(request: Request) {
           'franchise key',
           'franchisekey',
         ])
-        const backlogTeam = resolveExistingTeam(backlogTeamName)
+        const backlogLogo = getCell(row, ['logo', 'team logo', 'team_logo', 'franchise logo', 'franchise_logo', 'image'])
+        const backlogTeam =
+          resolveExistingTeam(backlogTeamName) ||
+          resolveExistingTeamLogo(backlogLogo) ||
+          resolveExistingTeam(backlogExplicitTeamKey)
 
         if (!backlogTeam) continue
 
@@ -776,69 +900,108 @@ export async function POST(request: Request) {
         backlogTeamByTeamKey.get(normalizeLookupValue(cleanedSourceLabel)) ||
         backlogTeamByName.get(normalizeLookupValue(cleanedSourceLabel)) ||
         resolveExistingTeam(cleanedSourceLabel)
+      const allowSourceTeamFallback = Boolean(sourceTeam && backlogTeamsInOrder.length <= 1)
       const blockTeamByRowIndex = new Map<number, SearchTeam>()
+      const markerKeyByRowIndex = new Map<number, string>()
+      const markerTeamByKey = new Map<string, SearchTeam | null>()
+      const markerKeysInOrder: string[] = []
 
-      if (!sourceTeam) {
-        const rowBlocks: number[][] = []
-        let currentBlock: number[] = []
+      statsRows.forEach((row, rowIndex) => {
+        const markerValue = getStatsRowTeamMarker(row)
+        const normalizedMarkerValue = normalizeLookupValue(markerValue)
+        if (!isLikelyStatsTeamMarker(markerValue) || !normalizedMarkerValue) return
 
-        statsRows.forEach((row, rowIndex) => {
-          const blockPlayerName = getCell(row, [
-            'player',
-            'player name',
-            'player_name',
-            'player username',
-            'username',
-            'roblox username',
-            'name',
-          ])
-          const blockRobloxUserId = normalizeRobloxUserId(
-            getCell(row, [
-              'roblox_user_id',
-              'roblox userid',
-              'roblox user id',
-              'user_id',
-              'user id',
-              'userid',
-            ])
-          )
-          const blockHasStats = [
-            getCell(row, ['gp', 'games', 'games played']),
-            getCell(row, ['goals', 'g']),
-            getCell(row, ['assists', 'a']),
-            getCell(row, ['points', 'pts', 'tp', 'p']),
-            getCell(row, ['hits']),
-            getCell(row, ['plus_minus', '+/-', 'plusminus']),
-            getCell(row, ['shots', 'sog']),
-            getCell(row, ['toi', 'time on ice']),
-            getCell(row, ['gk_saves', 'saves', 'svs', 'sv']),
-            getCell(row, ['goalie_wins', 'wins', 'w']),
-            getCell(row, ['goalie_shutouts', 'shutouts', 'so', 'sh']),
-          ].some((value) => (value || '').trim() !== '' && (value || '').trim() !== '0')
-          const blockHasIdentity = Boolean((blockPlayerName || '').trim() || blockRobloxUserId)
-
-          if (blockHasIdentity || blockHasStats) {
-            currentBlock.push(rowIndex)
-            return
-          }
-
-          if (currentBlock.length) {
-            rowBlocks.push(currentBlock)
-            currentBlock = []
-          }
-        })
-
-        if (currentBlock.length) {
-          rowBlocks.push(currentBlock)
+        markerKeyByRowIndex.set(rowIndex, normalizedMarkerValue)
+        if (!markerKeysInOrder.includes(normalizedMarkerValue)) {
+          markerKeysInOrder.push(normalizedMarkerValue)
         }
 
-        rowBlocks.forEach((block, blockIndex) => {
-          const blockTeam = backlogTeamsInOrder[blockIndex] || null
-          if (!blockTeam) return
-          block.forEach((rowIndex) => {
-            blockTeamByRowIndex.set(rowIndex, blockTeam)
-          })
+        if (!markerTeamByKey.has(normalizedMarkerValue)) {
+          markerTeamByKey.set(
+            normalizedMarkerValue,
+            backlogTeamByTeamKey.get(normalizedMarkerValue) ||
+              backlogTeamByName.get(normalizedMarkerValue) ||
+              resolveExistingTeam(markerValue) ||
+              resolveExistingTeamLogo(markerValue) ||
+              null
+          )
+        }
+      })
+
+      const unresolvedMarkerKeys = markerKeysInOrder.filter((markerKey) => !markerTeamByKey.get(markerKey))
+      const canMapUnresolvedMarkersByBacklogOrder =
+        backlogTeamsInOrder.length > 0 &&
+        (markerKeysInOrder.length > 1 || backlogTeamsInOrder.length === 1)
+
+      if (canMapUnresolvedMarkersByBacklogOrder) {
+        markerKeysInOrder.forEach((markerKey, markerIndex) => {
+          if (!markerTeamByKey.get(markerKey)) {
+            markerTeamByKey.set(markerKey, backlogTeamsInOrder[markerIndex] || null)
+          }
         })
+      } else if (unresolvedMarkerKeys.length && backlogTeamsInOrder.length > 1) {
+        responseSummary.stats.warnings.push(
+          `Stats tab "${source.label}": team/logo marker exported as one repeated value, so the importer skipped unsafe backlog-order team assignment instead of assigning everyone to one team.`
+        )
+      }
+
+      let currentMarkerKey = ''
+
+      statsRows.forEach((row, rowIndex) => {
+        const markerKey = markerKeyByRowIndex.get(rowIndex)
+        if (markerKey) {
+          currentMarkerKey = markerKey
+        }
+
+        const blockPlayerName = getCell(row, [
+          'player',
+          'player name',
+          'player_name',
+          'player username',
+          'username',
+          'roblox username',
+          'name',
+        ])
+        const blockRobloxUserId = normalizeRobloxUserId(
+          getCell(row, [
+            'roblox_user_id',
+            'roblox userid',
+            'roblox user id',
+            'user_id',
+            'user id',
+            'userid',
+          ])
+        )
+        const blockHasStats = [
+          getCell(row, ['gp', 'games', 'games played']),
+          getCell(row, ['goals', 'g']),
+          getCell(row, ['assists', 'a']),
+          getCell(row, ['points', 'pts', 'tp', 'p']),
+          getCell(row, ['hits']),
+          getCell(row, ['plus_minus', '+/-', 'plusminus']),
+          getCell(row, ['shots', 'sog']),
+          getCell(row, ['toi', 'time on ice']),
+          getCell(row, ['gk_saves', 'saves', 'svs', 'sv']),
+          getCell(row, ['goalie_wins', 'wins', 'w']),
+          getCell(row, ['goalie_shutouts', 'shutouts', 'so', 'sh']),
+        ].some((value) => (value || '').trim() !== '' && (value || '').trim() !== '0')
+        const blockHasIdentity = Boolean((blockPlayerName || '').trim() || blockRobloxUserId)
+
+        if (blockHasIdentity || blockHasStats) {
+          const currentMarkerTeam = currentMarkerKey ? markerTeamByKey.get(currentMarkerKey) || null : null
+          if (currentMarkerTeam) {
+            blockTeamByRowIndex.set(rowIndex, currentMarkerTeam)
+          }
+          return
+        }
+
+        currentMarkerKey = ''
+      })
+
+      if (sourceTeam && !allowSourceTeamFallback) {
+        responseSummary.stats.warnings.push(
+          `Stats tab "${source.label}": ignored tab-name team fallback because the backlog has multiple teams.`
+        )
       }
 
       for (const [index, row] of statsRows.entries()) {
@@ -853,6 +1016,14 @@ export async function POST(request: Request) {
         ])
         const teamName = getCell(row, ['team', 'team name', 'team_name', 'club', 'team key', 'teamkey'])
         const statsTeamKey = getCell(row, ['team key', 'teamkey', 'franchise key', 'franchisekey'])
+        const statsLogoValue = getCell(row, [
+          'logo',
+          'team logo',
+          'team_logo',
+          'franchise logo',
+          'franchise_logo',
+          'image',
+        ])
         const robloxUserId = normalizeRobloxUserId(
           getCell(row, [
           'roblox_user_id',
@@ -923,11 +1094,11 @@ export async function POST(request: Request) {
           null
         const matchedTeamFromRow =
           matchedTeamFromBacklog ||
-          (teamName
-            ? teamLookup.get(normalizeLookupValue(teamName)) || findFuzzyMatch(teamName, teams)
-            : null) ||
+          (teamName ? resolveExistingTeam(teamName) : null) ||
+          resolveExistingTeamLogo(statsLogoValue) ||
+          (statsTeamKey ? resolveExistingTeam(statsTeamKey) : null) ||
           blockTeam ||
-          sourceTeam ||
+          (allowSourceTeamFallback ? sourceTeam : null) ||
           null
 
         if (!player && resolvedPlayerName.trim()) {
@@ -1103,15 +1274,18 @@ export async function POST(request: Request) {
         existingId = existingId || existingStatsByKey.get(key)
         if (!existingId) {
           const candidates = existingStatsByPlayerGameType.get(playerGameTypeKey) || []
+          if (resolvedTeamId && candidates.length === 1) {
+            existingId = candidates[0].id
+          }
           const nullTeamCandidate = candidates.find((candidate) => !candidate.team_id)
           const invalidTeamCandidate = candidates.find((candidate) => {
             if (!candidate.team_id) return false
             const candidateTeam = teams.find((teamRow) => String(teamRow.id) === String(candidate.team_id))
             return isInvalidGeneratedTeamName(candidateTeam?.name)
           })
-          if (nullTeamCandidate) {
+          if (!existingId && nullTeamCandidate) {
             existingId = nullTeamCandidate.id
-          } else if (invalidTeamCandidate) {
+          } else if (!existingId && invalidTeamCandidate) {
             existingId = invalidTeamCandidate.id
           }
         }

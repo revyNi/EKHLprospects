@@ -364,27 +364,35 @@ function makeEditableStatSide(stat?: FullStat | null): EditableStatSide {
 }
 
 function mergeEditableStats(stats: FullStat[]) {
-  const rows = new Map<string, EditableStatRecord>()
+  const rows = new Map<string, EditableStatRecord[]>()
 
   stats.forEach((stat) => {
     const key = `${stat.season_id || 'no-season'}-${stat.team_id || `no-team-${stat.id}`}`
-    const existing = rows.get(key) || {
+    const bucket = rows.get(key) || []
+    const sideName = (stat.game_type || 'regular') === 'playoffs' ? 'playoffs' : 'regular'
+    const existing = bucket.find(
+      (row) => !row[sideName].id && !statSideHasValues(row[sideName])
+    ) || {
       team_id: stat.team_id || '',
       season_id: stat.season_id || '',
       regular: makeEditableStatSide(),
       playoffs: makeEditableStatSide(),
     }
 
-    if ((stat.game_type || 'regular') === 'playoffs') {
+    if (!bucket.includes(existing)) {
+      bucket.push(existing)
+    }
+
+    if (sideName === 'playoffs') {
       existing.playoffs = makeEditableStatSide(stat)
     } else {
       existing.regular = makeEditableStatSide(stat)
     }
 
-    rows.set(key, existing)
+    rows.set(key, bucket)
   })
 
-  return Array.from(rows.values())
+  return Array.from(rows.values()).flat()
 }
 
 function statSideHasValues(side: EditableStatSide) {
@@ -941,6 +949,13 @@ export default function PlayerPage() {
     setIsEditorOpen(true)
   }
 
+  function closeEditor() {
+    setIsEditorOpen(false)
+    setDeletedStatIds([])
+    setDeletedAwardIds([])
+    setSaveMessage('')
+  }
+
   function addStatRow() {
     setEditorStats((current) => [
       ...current,
@@ -988,12 +1003,17 @@ export default function PlayerPage() {
   }
 
   function removeStatRow(index: number) {
+    const statToRemove = editorStats[index]
+    const idsToDelete = [statToRemove?.regular.id, statToRemove?.playoffs.id].filter(Boolean) as string[]
+
+    if (idsToDelete.length) {
+      setDeletedStatIds((ids) => Array.from(new Set([...ids, ...idsToDelete])))
+      setSaveMessage(
+        `${idsToDelete.length} saved stat row${idsToDelete.length === 1 ? '' : 's'} marked for deletion. Save changes to delete from the database.`
+      )
+    }
+
     setEditorStats((current) => {
-      const statToRemove = current[index]
-      const idsToDelete = [statToRemove?.regular.id, statToRemove?.playoffs.id].filter(Boolean) as string[]
-      if (idsToDelete.length) {
-        setDeletedStatIds((ids) => [...ids, ...idsToDelete])
-      }
       return current.filter((_, rowIndex) => rowIndex !== index)
     })
   }
@@ -1127,46 +1147,56 @@ export default function PlayerPage() {
       role_id: roleId,
     }))
 
-    const actions: PromiseLike<{ error: { message: string } | null }>[] = [
-      supabase.from('players').update(factsPayload).eq('id', playerId),
-    ]
+    const savedStatIds = new Set(
+      existingStatRows.map((row) => row.id).filter((id): id is string => Boolean(id))
+    )
+    const finalDeletedStatIds = Array.from(new Set([...deletedStatIds, ...statIdsToDeleteFromEmptyRows])).filter(
+      (id) => !savedStatIds.has(id)
+    )
 
-    if (existingStatRows.length) {
-      actions.push(supabase.from('stats').upsert(existingStatRows))
+    const runSaveStep = async (action: PromiseLike<{ error: { message: string } | null }>) => {
+      const result = await action
+      if (result.error) {
+        throw new Error(result.error.message)
+      }
     }
-    if (newStatRows.length) {
-      actions.push(
-        supabase.from('stats').insert(
-          newStatRows.map((row) => ({
-            ...row,
-            id: row.id || makeClientId(),
-          }))
+
+    try {
+      await runSaveStep(supabase.from('players').update(factsPayload).eq('id', playerId))
+
+      if (finalDeletedStatIds.length) {
+        await runSaveStep(
+          supabase.from('stats').delete().eq('player_id', playerId).in('id', finalDeletedStatIds)
         )
-      )
-    }
-    const finalDeletedStatIds = Array.from(new Set([...deletedStatIds, ...statIdsToDeleteFromEmptyRows]))
-    if (finalDeletedStatIds.length) {
-      actions.push(supabase.from('stats').delete().in('id', finalDeletedStatIds))
-    }
-    if (existingAwards.length) {
-      actions.push(supabase.from('awards').upsert(existingAwards))
-    }
-    if (newAwards.length) {
-      actions.push(supabase.from('awards').insert(newAwards))
-    }
-    if (deletedAwardIds.length) {
-      actions.push(supabase.from('awards').delete().in('id', deletedAwardIds))
-    }
-    actions.push(supabase.from('player_role_assignments').delete().eq('player_id', playerId))
-    if (roleAssignmentRows.length) {
-      actions.push(supabase.from('player_role_assignments').insert(roleAssignmentRows))
-    }
-
-    const results = await Promise.all(actions)
-    const failedResult = results.find((result) => result.error)
-
-    if (failedResult?.error) {
-      setSaveMessage(failedResult.error.message)
+      }
+      if (existingStatRows.length) {
+        await runSaveStep(supabase.from('stats').upsert(existingStatRows))
+      }
+      if (newStatRows.length) {
+        await runSaveStep(
+          supabase.from('stats').insert(
+            newStatRows.map((row) => ({
+              ...row,
+              id: row.id || makeClientId(),
+            }))
+          )
+        )
+      }
+      if (existingAwards.length) {
+        await runSaveStep(supabase.from('awards').upsert(existingAwards))
+      }
+      if (newAwards.length) {
+        await runSaveStep(supabase.from('awards').insert(newAwards))
+      }
+      if (deletedAwardIds.length) {
+        await runSaveStep(supabase.from('awards').delete().in('id', deletedAwardIds))
+      }
+      await runSaveStep(supabase.from('player_role_assignments').delete().eq('player_id', playerId))
+      if (roleAssignmentRows.length) {
+        await runSaveStep(supabase.from('player_role_assignments').insert(roleAssignmentRows))
+      }
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : 'Could not save player changes.')
       setIsSaving(false)
       return
     }
@@ -1174,6 +1204,8 @@ export default function PlayerPage() {
     setSaveMessage('Saved.')
     setIsSaving(false)
     setIsEditorOpen(false)
+    setDeletedStatIds([])
+    setDeletedAwardIds([])
     setReloadKey((value) => value + 1)
   }
 
@@ -1857,7 +1889,7 @@ export default function PlayerPage() {
           <div style={modalCard} className="motion-modal-card">
             <div style={modalHeader}>
               <div style={modalTitle}>Update Stats/Facts</div>
-              <button type="button" onClick={() => setIsEditorOpen(false)} style={modalCloseButton}>
+              <button type="button" onClick={closeEditor} style={modalCloseButton}>
                 Close
               </button>
             </div>
@@ -2017,6 +2049,12 @@ export default function PlayerPage() {
                     </button>
                   </div>
                 </div>
+
+                {deletedStatIds.length ? (
+                  <div style={editorDeleteNotice}>
+                    {deletedStatIds.length} saved stat row{deletedStatIds.length === 1 ? '' : 's'} will be deleted when you save changes.
+                  </div>
+                ) : null}
 
                 {editorStats.map((row, index) => {
                   const regularIsGoalie = isGoaliePosition(row.regular.position || editorFacts.position)
@@ -2216,7 +2254,7 @@ export default function PlayerPage() {
             <div style={modalFooter}>
               <div style={saveMessageStyle}>{saveMessage}</div>
               <div style={editorActionRow}>
-                <button type="button" onClick={() => setIsEditorOpen(false)} style={secondaryEditorButton}>
+                <button type="button" onClick={closeEditor} style={secondaryEditorButton}>
                   Cancel
                 </button>
                 <button type="button" onClick={saveEditor} style={primaryEditorButton}>
@@ -3107,6 +3145,17 @@ const removeButton = {
   fontSize: 12,
   fontWeight: 700,
   cursor: 'pointer',
+}
+
+const editorDeleteNotice = {
+  border: '1px solid #f0c7c7',
+  borderRadius: 8,
+  background: '#fff4f4',
+  color: '#9e1d1d',
+  padding: '9px 11px',
+  fontSize: 12,
+  fontWeight: 700,
+  marginBottom: 12,
 }
 
 const modalFooter = {

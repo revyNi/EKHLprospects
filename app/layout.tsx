@@ -226,6 +226,7 @@ type AdminImportForm = {
   league_id: string
   season_id: string
   stats_sheet_url: string
+  backlog_sheet_url: string
   matches_sheet_url: string
 }
 
@@ -349,6 +350,7 @@ const emptyImportForm = (): AdminImportForm => ({
   league_id: '',
   season_id: '',
   stats_sheet_url: '',
+  backlog_sheet_url: '',
   matches_sheet_url: '',
 })
 
@@ -1421,7 +1423,11 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
       return
     }
 
-    if (!importForm.stats_sheet_url.trim() && !importForm.matches_sheet_url.trim()) {
+    if (
+      !importForm.stats_sheet_url.trim() &&
+      !importForm.backlog_sheet_url.trim() &&
+      !importForm.matches_sheet_url.trim()
+    ) {
       setAdminSaveMessage('Paste at least one Google Sheet link.')
       return
     }
@@ -1449,6 +1455,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
         leagueId: importForm.league_id,
         seasonId: importForm.season_id,
         statsSheetUrl: importForm.stats_sheet_url,
+        backlogSheetUrl: importForm.backlog_sheet_url,
         matchesSheetUrl: importForm.matches_sheet_url,
       }),
     })
@@ -2291,6 +2298,17 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                       />
                     </label>
                     <label style={{ ...fieldWrap, gridColumn: '1 / -1' }}>
+                      <span style={fieldLabel}>Backlog Sheet Link</span>
+                      <input
+                        value={importForm.backlog_sheet_url}
+                        onChange={(event) =>
+                          setImportForm((current) => ({ ...current, backlog_sheet_url: event.target.value }))
+                        }
+                        placeholder="Paste the Backlog tab link or CSV export URL"
+                        style={fieldInput}
+                      />
+                    </label>
+                    <label style={{ ...fieldWrap, gridColumn: '1 / -1' }}>
                       <span style={fieldLabel}>Results Sheet Link</span>
                       <input
                         value={importForm.matches_sheet_url}
@@ -2302,7 +2320,7 @@ function openAdminPanel(panel: Exclude<AdminPanelType, null>) {
                       />
                     </label>
                     <div style={{ ...helperText, gridColumn: '1 / -1' }}>
-                      Use one sheet, two sheets, or only one of the links. For stats, you can paste the main Google Sheet link and the importer will try to detect tabs named like Regular Season or Playoffs automatically.
+                      For grouped Game Stats sheets, paste the matching Backlog tab too so player blocks can be assigned to the real teams already in your database.
                     </div>
                     <div style={{ ...helperText, gridColumn: '1 / -1' }}>
                       Stats rows should include player/team names plus season totals. Results rows should include date, home team, visiting team, and optionally scores, status, venue, and attendance.
